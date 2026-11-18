@@ -1,0 +1,220 @@
+species,task,priority,minutes,frequency
+dog,feed breakfast,high,10,daily
+dog,morning feed,high,10,daily
+dog,dinner for Rex,high,10,daily
+dog,evening meal,high,10,daily
+dog,fill the food bowl,high,10,daily
+dog,give kibble,high,10,daily
+dog,prepare raw food dinner,high,20,daily
+dog,puppy lunch,high,10,daily
+dog,feed puppy midday meal,high,10,daily
+dog,breakfast and fresh water,high,10,daily
+dog,refresh water bowl,high,5,daily
+dog,top up water,high,5,daily
+dog,soak kibble for senior dog,high,10,daily
+dog,weigh out diet food,high,10,daily
+dog,morning walk,high,30,daily
+dog,walkies,high,30,daily
+dog,walk Mochi,high,30,daily
+dog,dog walk before work,high,30,daily
+dog,run with the husky,high,45,daily
+dog,jog around the park,medium,45,daily
+dog,evening walk,medium,30,daily
+dog,second walk after dinner,medium,30,daily
+dog,lunchtime stroll,medium,20,daily
+dog,short walk around the block,high,15,daily
+dog,quick toilet break,high,5,daily
+dog,let the dog out to pee,high,5,daily
+dog,potty break for puppy,high,5,daily
+dog,gentle walk for old dog,high,20,daily
+dog,senior dog sniff walk,high,20,daily
+dog,long hike on the trail,medium,90,weekly
+dog,weekend beach trip,low,90,once
+dog,trip to the dog park,medium,45,weekly
+dog,off lead run in the field,medium,45,daily
+dog,give heartworm pill,high,5,once
+dog,monthly flea treatment,high,5,once
+dog,apply tick spot-on,high,5,once
+dog,worming tablet,high,5,once
+dog,joint supplement with breakfast,medium,5,daily
+dog,give glucosamine chew,medium,5,daily
+dog,allergy tablet,high,5,daily
+dog,give Apoquel,high,5,daily
+dog,insulin injection,high,5,daily
+dog,insulin shot after dinner,high,5,daily
+dog,eye drops,high,5,daily
+dog,give antibiotics,high,5,daily
+dog,pain meds for arthritis,high,5,daily
+dog,thyroid pill,high,5,daily
+dog,ear infection drops,high,5,daily
+dog,give seizure medication,high,5,daily
+dog,brush coat,low,15,weekly
+dog,brush the husky,medium,20,weekly
+dog,deshed undercoat,medium,20,weekly
+dog,brush teeth,medium,5,daily
+dog,dental chew,low,5,daily
+dog,trim nails,low,15,once
+dog,clip claws,low,15,once
+dog,bath time,low,30,once
+dog,give the dog a bath,low,30,once
+dog,wipe muddy paws,low,5,daily
+dog,clean ears,low,10,weekly
+dog,check for ticks after walk,medium,5,daily
+dog,sit and stay practice,medium,10,daily
+dog,recall training,medium,10,daily
+dog,loose leash training,medium,10,daily
+dog,puppy training session,high,10,daily
+dog,crate training,high,10,daily
+dog,puppy obedience class,medium,60,weekly
+dog,clicker training tricks,low,10,daily
+dog,puzzle feeder,medium,15,daily
+dog,snuffle mat,medium,10,daily
+dog,stuffed kong,medium,10,daily
+dog,scent game in the garden,medium,15,daily
+dog,play fetch in the yard,medium,15,daily
+dog,tug of war,low,10,daily
+dog,playdate with neighbour's dog,low,45,once
+dog,vet appointment,high,60,once
+dog,vet visit at 10,high,60,once
+dog,annual vaccinations,high,45,once
+dog,booster shot at the vet,high,45,once
+dog,vet check-up,high,60,once
+dog,follow-up vet appointment,high,45,once
+dog,groomer appointment,medium,90,once
+dog,drop off at doggy daycare,medium,20,once
+dog,wash dog bed,low,20,weekly
+dog,pick up poop in the yard,medium,10,daily
+dog,wash food and water bowls,low,5,daily
+dog,vacuum dog hair,low,20,weekly
+dog,calm walk before leaving the house,medium,15,daily
+dog,separation anxiety practice,medium,10,daily
+dog,weigh the dog,medium,5,weekly
+dog,check lumps and bumps,medium,5,weekly
+cat,feed breakfast,high,10,daily
+cat,feed Luna,high,10,daily
+cat,morning wet food,high,10,daily
+cat,wet food dinner,high,10,daily
+cat,evening cat feed,high,10,daily
+cat,renal diet breakfast,high,10,daily
+cat,kitten feeding,high,10,daily
+cat,kitten lunch,high,10,daily
+cat,fill the water fountain,high,5,daily
+cat,fresh water for the cat,high,5,daily
+cat,measure dry food,high,5,daily
+cat,scoop the litter box,high,5,daily
+cat,scoop litter,high,5,daily
+cat,clean out litter tray,high,5,daily
+cat,full litter change,medium,20,weekly
+cat,wash the litter box,medium,20,weekly
+cat,deep clean litter tray,medium,20,weekly
+cat,wand toy play,medium,15,daily
+cat,play with feather toy,medium,15,daily
+cat,laser pointer session,low,10,daily
+cat,play session,medium,15,daily
+cat,interactive play before bed,medium,15,daily
+cat,kitten playtime,high,15,daily
+cat,gentle play for senior cat,medium,10,daily
+cat,give kidney pill,high,5,daily
+cat,kidney meds,high,5,daily
+cat,pill pocket for Luna,high,5,daily
+cat,give kidney medication at 8,high,5,daily
+cat,subcutaneous fluids,high,15,daily
+cat,sub-q fluids for kidneys,high,15,daily
+cat,thyroid medication,high,5,daily
+cat,methimazole dose,high,5,daily
+cat,insulin for diabetic cat,high,5,daily
+cat,give antibiotics,high,5,daily
+cat,ear mite drops,high,5,daily
+cat,appetite stimulant,high,5,daily
+cat,flea treatment,high,5,once
+cat,worming tablet,high,5,once
+cat,brush the cat,low,10,weekly
+cat,brush short coat,low,10,weekly
+cat,brush long-haired Persian,medium,15,daily
+cat,comb out mats,medium,15,daily
+cat,groom Maine Coon,medium,15,daily
+cat,trim cat nails,low,10,once
+cat,clip claws,low,10,once
+cat,brush cat teeth,medium,5,daily
+cat,clean cat eyes,low,5,daily
+cat,vet appointment,high,60,once
+cat,vet check-up,high,60,once
+cat,senior cat blood test,high,45,once
+cat,kitten vaccinations,high,45,once
+cat,spay appointment,high,60,once
+cat,dental cleaning at the vet,high,60,once
+cat,carrier training,low,10,daily
+cat,leave carrier out,low,5,once
+cat,set up puzzle feeder,medium,10,daily
+cat,hide treats around the house,medium,10,daily
+cat,rotate toys,low,5,weekly
+cat,catnip time,low,5,daily
+cat,clean water fountain,medium,10,weekly
+cat,replace fountain filter,medium,10,weekly
+cat,weigh the cat,medium,5,weekly
+cat,check weight and appetite,medium,5,weekly
+cat,cuddle and lap time,low,15,daily
+cat,brush and check for fleas,low,10,weekly
+cat,clean scratching post area,low,10,weekly
+cat,vacuum cat hair,low,20,weekly
+cat,handle kitten paws and ears,medium,5,daily
+other,hay and fresh greens for rabbit,high,10,daily
+other,feed the bunny,high,10,daily
+other,refill rabbit hay,high,5,daily
+other,rabbit pellets and water,high,5,daily
+other,spot clean rabbit litter,medium,10,daily
+other,clean rabbit hutch,medium,30,weekly
+other,full enclosure clean,medium,30,weekly
+other,rabbit free roam time,high,90,daily
+other,bunny exercise in the garden,high,60,daily
+other,trim rabbit nails,low,15,once
+other,brush rabbit during moult,medium,10,daily
+other,check rabbit teeth,medium,5,weekly
+other,feed guinea pigs veggies,high,10,daily
+other,vitamin C veg for guinea pigs,high,10,daily
+other,guinea pig hay and water,high,5,daily
+other,guinea pig floor time,medium,30,daily
+other,clean guinea pig cage,medium,30,weekly
+other,weigh guinea pigs,medium,5,weekly
+other,feed the hamster,high,5,daily
+other,hamster food and water check,high,5,daily
+other,spot clean hamster cage,medium,10,daily
+other,clean hamster cage,medium,20,weekly
+other,hamster playtime out of cage,low,15,daily
+other,feed the budgie,high,10,daily
+other,fresh seed and water for bird,high,10,daily
+other,parrot fresh fruit and veg,high,10,daily
+other,bird out of cage time,medium,60,daily
+other,talk to the parrot,medium,15,daily
+other,clean bird cage,medium,30,weekly
+other,change cage liner,medium,10,daily
+other,cover bird cage at night,low,5,daily
+other,trim bird nails,low,15,once
+other,avian vet check,high,60,once
+other,feed the fish,high,5,daily
+other,feed goldfish,high,5,daily
+other,check tank temperature,medium,5,daily
+other,check aquarium filter,medium,5,daily
+other,partial water change,medium,30,weekly
+other,water change for the tank,medium,30,weekly
+other,test water parameters,medium,10,weekly
+other,clean aquarium glass,low,15,weekly
+other,rinse filter sponge,medium,15,weekly
+other,mist the terrarium,high,5,daily
+other,feed crickets to gecko,high,10,daily
+other,dust insects with calcium,high,5,daily
+other,check heat lamp,high,5,daily
+other,clean reptile enclosure,medium,30,weekly
+other,soak the tortoise,medium,15,weekly
+other,tortoise greens,high,10,daily
+other,handle the snake,low,15,weekly
+other,feed snake frozen mouse,high,10,weekly
+other,reptile vet appointment,high,60,once
+other,ferret playtime,medium,45,daily
+other,feed the ferret,high,10,daily
+other,clean ferret litter,high,5,daily
+other,feed the chickens,high,10,daily
+other,collect eggs,medium,5,daily
+other,clean chicken coop,medium,45,weekly
+other,let chickens out in the morning,high,5,daily
+other,shut the coop at dusk,high,5,daily

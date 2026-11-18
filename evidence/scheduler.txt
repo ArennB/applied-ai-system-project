@@ -1,0 +1,108 @@
+$ python main.py
+
+================================================================
+PawPal+
+================================================================
+Owner: Jordan
+Pets:  Mochi (dog), Luna (cat)
+Time:  75 min available from 08:00 (180 min of care requested)
+
+--- Tasks as entered --------------------------------------------
+  [ ] medium Evening walk for Mochi        45 min
+  [ ] high   Morning walk for Mochi        30 min
+  [ ] low    Vet paperwork for Mochi        5 min
+  [ ] high   Feeding for Mochi             10 min
+  [ ] high   Vet appointment for Mochi     30 min
+  [ ] low    Brush fur for Luna            20 min
+  [ ] medium Playtime for Luna             15 min
+  [ ] high   Feeding for Luna              10 min
+  [ ] high   Medication for Luna           15 min
+
+--- After Scheduler.sort_tasks() --------------------------------
+  [ ] high   Feeding for Mochi             10 min
+  [ ] high   Feeding for Luna              10 min
+  [ ] high   Medication for Luna           15 min
+  [ ] high   Morning walk for Mochi        30 min
+  [ ] high   Vet appointment for Mochi     30 min
+  [ ] medium Playtime for Luna             15 min
+  [ ] medium Evening walk for Mochi        45 min
+  [ ] low    Vet paperwork for Mochi        5 min
+  [ ] low    Brush fur for Luna            20 min
+  (highest priority first, shortest first on ties)
+
+--- Today's Schedule --------------------------------------------
+Daily plan:
+  08:00 - Feeding for Mochi (10 min) [priority: high, daily]
+  08:10 - Feeding for Luna (10 min) [priority: high, daily]
+  08:20 - Vet paperwork for Mochi (5 min) [priority: low]
+  09:00 - Vet appointment for Mochi (30 min) [priority: high]
+  09:00 - Medication for Luna (15 min) [priority: high, daily]
+  Total planned: 70 min
+  Order: highest priority first, shortest first on ties.
+
+Skipped (not enough time left):
+  Morning walk for Mochi (30 min) [priority: high, daily]
+  Playtime for Luna (15 min) [priority: medium, daily]
+  Evening walk for Mochi (45 min) [priority: medium, daily]
+  Brush fur for Luna (20 min) [priority: low, weekly]
+
+Warnings:
+  Vet appointment for Mochi (09:00-09:30) overlaps Medication for Luna (09:00-09:15) [different pets]
+
+--- Conflict check ----------------------------------------------
+  1 conflict(s):
+    Vet appointment for Mochi (09:00-09:30) overlaps Medication for Luna (09:00-09:15) [different pets]
+  Both were kept: a clash between fixed times is the owner's to resolve.
+
+--- Filtering with Owner.filter_tasks() -------------------------
+  completed Morning walk   (daily ) -> next due 2026-11-19
+  completed Vet paperwork  (once  ) -> does not repeat
+  completed Feeding        (daily ) -> next due 2026-11-19
+
+  every task           11  Evening walk (Mochi), Morning walk (Mochi), Vet paperwork (Mochi), Feeding (Mochi), Vet appointment (Mochi), Morning walk (Mochi), Feeding (Mochi), Brush fur (Luna), Playtime (Luna), Feeding (Luna), Medication (Luna)
+  Mochi only            7  Evening walk (Mochi), Morning walk (Mochi), Vet paperwork (Mochi), Feeding (Mochi), Vet appointment (Mochi), Morning walk (Mochi), Feeding (Mochi)
+  Luna only             4  Brush fur (Luna), Playtime (Luna), Feeding (Luna), Medication (Luna)
+  still outstanding     8  Evening walk (Mochi), Vet appointment (Mochi), Morning walk (Mochi), Feeding (Mochi), Brush fur (Luna), Playtime (Luna), Feeding (Luna), Medication (Luna)
+  already completed     3  Morning walk (Mochi), Vet paperwork (Mochi), Feeding (Mochi)
+  Mochi, outstanding    4  Evening walk (Mochi), Vet appointment (Mochi), Morning walk (Mochi), Feeding (Mochi)
+
+--- Replanning after completion ---------------------------------
+Daily plan:
+  08:00 - Feeding for Luna (10 min) [priority: high, daily]
+  08:10 - Playtime for Luna (15 min) [priority: medium, daily]
+  09:00 - Vet appointment for Mochi (30 min) [priority: high]
+  09:00 - Medication for Luna (15 min) [priority: high, daily]
+  Total planned: 70 min
+  Order: highest priority first, shortest first on ties.
+
+Skipped (not enough time left):
+  Evening walk for Mochi (45 min) [priority: medium, daily]
+  Brush fur for Luna (20 min) [priority: low, weekly]
+
+Warnings:
+  Vet appointment for Mochi (09:00-09:30) overlaps Medication for Luna (09:00-09:15) [different pets]
+
+--- Queued for later --------------------------------------------
+  2026-11-19  Morning walk for Mochi (daily)
+  2026-11-19  Feeding for Mochi (daily)
+
+--- Tomorrow's plan (2026-11-19) --------------------------------
+Daily plan:
+  08:00 - Feeding for Mochi (10 min) [priority: high, daily]
+  08:10 - Feeding for Luna (10 min) [priority: high, daily]
+  09:00 - Vet appointment for Mochi (30 min) [priority: high]
+  09:00 - Medication for Luna (15 min) [priority: high, daily]
+  Total planned: 65 min
+  Order: highest priority first, shortest first on ties.
+
+Skipped (not enough time left):
+  Morning walk for Mochi (30 min) [priority: high, daily]
+  Playtime for Luna (15 min) [priority: medium, daily]
+  Evening walk for Mochi (45 min) [priority: medium, daily]
+  Brush fur for Luna (20 min) [priority: low, weekly]
+
+Warnings:
+  Vet appointment for Mochi (09:00-09:30) overlaps Medication for Luna (09:00-09:15) [different pets]
+================================================================
+
+[exit code 0]

@@ -1,0 +1,153 @@
+%% PawPal+ system overview: components, data flow, and where humans and tests check the AI.
+%% Colours: blue = human, purple = AI, green = deterministic code, orange = guardrail/check, grey = testing.
+flowchart TB
+    %% ---------------- Human input ----------------
+    subgraph INPUT["👤 Owner (Streamlit app.py)"]
+        direction LR
+        H_REQ["Plan with AI<br/>free-text day description"]
+        H_Q["Ask the care guide<br/>question"]
+        H_QUICK["Quick add<br/>e.g. 'evening walk 30 min'"]
+        H_FORM["Manual forms<br/>pets and tasks"]
+    end
+
+    %% ---------------- Input guardrails ----------------
+    subgraph GUARD_IN["🛡️ Input guardrails (pawpal_guardrails)"]
+        G_CLEAN["Clean text + length caps"]
+        G_INJ{"Prompt injection?"}
+        G_URG{"Emergency words?"}
+        G_RATE{"Rate limit<br/>10 AI calls / 5 min"}
+    end
+
+    H_REQ --> G_CLEAN
+    H_Q --> G_CLEAN
+    H_QUICK -->|length cap only| G_CLEAN
+    G_CLEAN --> G_INJ
+    G_INJ -->|yes| BLOCK["Refused with a message<br/>model never called"]
+    G_INJ -->|no| G_URG
+    G_URG -->|yes| BANNER["🚨 'Call your vet now' banner<br/>request still continues"]
+    G_URG --> G_RATE
+    G_RATE -->|over limit| WAIT["Asked to wait"]
+
+    %% ---------------- Knowledge ----------------
+    subgraph KNOW["📚 Knowledge & data"]
+        KB_FILES[("knowledge/*.md<br/>care guide")]
+        KB["KnowledgeBase<br/>TF-IDF retrieval (pawpal_rag)"]
+        DATA[("data/task_dataset.csv<br/>labelled tasks")]
+        KB_FILES --> KB
+    end
+
+    %% ---------------- AI planner ----------------
+    subgraph AGENT["🤖 Planning agent (pawpal_agent)"]
+        PA["PlanningAgent loop<br/>plan → act → check<br/>max 15 steps, 12 calls/turn,<br/>stops after 3 repeated errors"]
+        GEM["Gemini<br/>GeminiClient.next_step"]
+        TOOLS["PlannerTools<br/>validated tools on a deep copy of pets"]
+        PA <-->|messages / tool calls| GEM
+        PA -->|dispatch| TOOLS
+        TOOLS -->|search_care_guide| KB
+    end
+
+    %% ---------------- RAG Q&A ----------------
+    subgraph QA["📖 Ask the care guide (pawpal_qa)"]
+        QA_RET["Retrieve top 4 passages"]
+        QA_GATE{"Relevant passage?<br/>score ≥ 0.1 + shared topic word"}
+        QA_GEN["Gemini.generate<br/>answer ONLY from numbered passages"]
+        QA_RET --> QA_GATE
+        QA_GATE -->|yes, key set| QA_GEN
+    end
+
+    %% ---------------- Trained model ----------------
+    subgraph MODEL["⚡ Trained task model (pawpal_model)"]
+        TM["TaskModel<br/>TF-IDF + logistic regression<br/>priority · minutes · frequency"]
+    end
+    DATA -->|trained at startup| TM
+
+    %% ---------------- Deterministic core ----------------
+    subgraph CORE["⚙️ Deterministic core (pawpal_system)"]
+        PETS[("Pets & Tasks<br/>session_state")]
+        SCHED["Scheduler.build_plan<br/>source of truth for times"]
+        PETS --> SCHED
+    end
+
+    G_RATE -->|plan request| PA
+    G_RATE -->|question| QA_RET
+    G_CLEAN -->|quick add text| TM
+    QA_RET --> KB
+    TOOLS -->|build_plan| SCHED
+    TM -->|predicted labels| PETS
+    H_FORM --> PETS
+
+    %% ---------------- Output checks ----------------
+    subgraph GUARD_OUT["✅ Automated checks on AI output"]
+        POST["Independent post-check<br/>rebuild plan; flag skipped high-priority,<br/>clashes, step cap, guide not used"]
+        SECOND["Second opinion<br/>TaskModel disagrees on priority<br/>with ≥ 70% confidence"]
+        CITE{"Valid [n] citations?"}
+        NUMS{"Every number appears<br/>in cited passages?"}
+        VET["Add vet note to health answers"]
+        CAP["Clean + cap explanation length"]
+    end
+
+    PA -->|finish| POST
+    POST --> CAP
+    TM -.->|re-labels agent tasks| SECOND
+    POST --> SECOND
+    QA_GEN --> CITE
+    CITE -->|yes| NUMS
+    NUMS -->|yes| VET
+    CITE -->|no| UNGROUNDED["Shown as 'ungrounded'<br/>with warning"]
+    NUMS -->|no| UNGROUNDED
+    QA_GATE -->|no| NOTCOV["'Guide doesn't cover that'<br/>no model call"]
+    QA_GATE -->|yes, no key| PASSAGES["Passages shown only"]
+
+    %% ---------------- Human review ----------------
+    subgraph REVIEW["👀 Human review of AI results"]
+        R_WHY["'Why this plan?'<br/>sources, agent steps, second opinions"]
+        R_COMMIT["Owner sees result; agent's pets<br/>committed only on success"]
+        R_EDIT["Manage tasks editor<br/>fix priority / minutes / times"]
+        R_TODAY["📅 Today plan<br/>didn't-fit + clash warnings,<br/>tick tasks done"]
+        R_ANS["Answer + cited sources<br/>owner checks against passages"]
+    end
+
+    CAP --> R_COMMIT
+    SECOND --> R_WHY
+    R_COMMIT --> PETS
+    R_COMMIT --> R_WHY
+    VET --> R_ANS
+    UNGROUNDED --> R_ANS
+    SCHED --> R_TODAY
+    R_TODAY --> R_EDIT
+    R_EDIT -->|edits| PETS
+
+    %% ---------------- Testing & observability ----------------
+    subgraph TEST["🧪 Testing & observability"]
+        T_UNIT["pytest: 174 tests<br/>FakeLLM scripts the agent,<br/>FakeTextLLM the Q&A"]
+        T_APP["Streamlit AppTest<br/>end-to-end UI, no API key"]
+        T_EVAL["python -m pawpal_model<br/>hold-out + 5-fold CV vs baseline<br/>→ data/model_report.md"]
+        T_LOG[("logs/pawpal.log<br/>run IDs, tool calls, latency,<br/>guardrail hits")]
+        T_LABELS["Human review of<br/>dataset labels"]
+    end
+
+    T_UNIT -.->|verifies| PA
+    T_UNIT -.->|verifies| GUARD_IN
+    T_UNIT -.->|verifies| GUARD_OUT
+    T_UNIT -.->|verifies| QA_GATE
+    T_APP -.->|verifies| INPUT
+    T_EVAL -.->|measures| TM
+    T_LABELS -.->|checks| DATA
+    PA -.->|logs| T_LOG
+    QA_GEN -.->|logs| T_LOG
+    G_INJ -.->|logs| T_LOG
+
+    %% ---------------- Styles ----------------
+    classDef human fill:#dbeafe,stroke:#2563eb,color:#1e3a8a
+    classDef ai fill:#ede9fe,stroke:#7c3aed,color:#4c1d95
+    classDef code fill:#dcfce7,stroke:#16a34a,color:#14532d
+    classDef check fill:#ffedd5,stroke:#ea580c,color:#7c2d12
+    classDef test fill:#f3f4f6,stroke:#6b7280,color:#111827
+    classDef stop fill:#fee2e2,stroke:#dc2626,color:#7f1d1d
+
+    class H_REQ,H_Q,H_QUICK,H_FORM,R_WHY,R_COMMIT,R_EDIT,R_TODAY,R_ANS,T_LABELS human
+    class PA,GEM,QA_GEN,TM ai
+    class KB,KB_FILES,DATA,PETS,SCHED,TOOLS,QA_RET code
+    class G_CLEAN,G_INJ,G_URG,G_RATE,POST,SECOND,CITE,NUMS,VET,CAP,QA_GATE check
+    class T_UNIT,T_APP,T_EVAL,T_LOG test
+    class BLOCK,BANNER,WAIT,UNGROUNDED,NOTCOV,PASSAGES stop
