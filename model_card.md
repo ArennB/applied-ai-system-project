@@ -7,7 +7,7 @@ system does and how it's built, see the [README](README.md).
 
 | | |
 |---|---|
-| **AI components** | A planning agent and a care-guide Q&A, both using Gemini (`gemini-3.8-flash` by default); TF-IDF retrieval over a hand-written care guide; a scikit-learn task classifier trained on 219 labelled tasks |
+| **AI components** | A planning agent and a care-guide Q&A, both using Gemini (`gemini-3.8-flash` by default, falling back to lighter "flash-lite" models when it's overloaded); TF-IDF retrieval over a hand-written care guide; a scikit-learn task classifier trained on 219 labelled tasks |
 | **Intended use** | Helping a pet owner turn a description of their day into a schedule of routine care tasks, and answering common care questions from a small, cited guide |
 | **Not intended for** | Diagnosis, medication dosing, emergencies, or anything that should go to a vet |
 | **Who decides** | Gemini proposes tasks, but the original deterministic scheduler places them. The classifier only flags disagreements. The owner can edit everything. |
@@ -59,6 +59,22 @@ confirm that an answer cites a passage and that its numbers appear in that
 passage. They can't confirm that a sentence without numbers is a fair
 summary of what it cites.
 
+**It depends on an outside service that isn't always available.** Planning
+and written answers need Google's servers. During testing, every full Gemini
+Flash model was overloaded and returning errors. PawPal now falls back to
+lighter "flash-lite" models, so it keeps working, but:
+- The same request can be answered by a different, less capable model
+  depending on Google's load that day, so plan quality isn't consistent from
+  run to run.
+- The status box shows which model answered, but nothing judges whether the
+  lighter model's plan is as good.
+- With no key, or with every model down, the AI features are off. The
+  scheduler, task editor and care-guide passages still work.
+
+**A plan takes many round trips, so it can be slow.** A plan is 4 to 15
+separate Gemini calls. In normal conditions a step takes a few seconds; when
+Google is busy, one slow call holds up the whole plan.
+
 ---
 
 ## Misuse and how it's prevented
@@ -96,6 +112,19 @@ summary of what it cites.
   "Vomiting blood" doesn't trigger the emergency banner. Neither was in my
   original test cases. Both came from deliberately asking things the system
   shouldn't handle.
+- **The hardest reliability problem was availability, not accuracy.** I
+  expected the model's mistakes to be the main risk. Instead, the first live
+  runs failed before the model said anything:
+  - "503 high demand" errors from Google, then plans that ran for minutes.
+  - My first fix, a time limit, turned endless waiting into "504 deadline
+    exceeded" errors, which fail faster but still fail.
+  - Testing each model directly showed every full Flash model was overloaded
+    while the "lite" models answered in under a second. So I added an
+    automatic fallback. The next real run fell back after one timeout and
+    finished the plan in about 2 seconds.
+
+  The lesson was that "does it work?" includes "is the service there?", and
+  that the logs, which time every step, are what made the cause visible.
 - **I had to resist changing a test to make it pass.** A test that required
   the best husky passage to rank first failed. The honest fix was to test
   for the top 3, which is what the model actually sees, and record the

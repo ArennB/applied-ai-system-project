@@ -5,6 +5,7 @@ makes the agent loop, the guardrails and the post-check fully deterministic.
 """
 
 from datetime import date
+from types import SimpleNamespace
 
 import pytest
 
@@ -338,3 +339,122 @@ def test_real_trained_model_agrees_with_sensible_priorities(guide):
     flagged = [o.task for o in result.second_opinions]
     assert "Kidney meds" not in flagged
     assert flagged == ["Laser pointer play"]
+
+
+# --- Progress reporting and Gemini settings ----------------------------------
+
+
+def test_progress_reports_each_step_and_tool_call(guide):
+    seen: list[tuple[int, str]] = []
+    agent = PlanningAgent(FakeLLM([
+        call("add_pet", name="Mochi", animal_type="dog"),
+        call("add_task", pet_name="Mochi", title="Walk", duration_minutes=30,
+             priority="urgent", frequency="daily"),
+        call("build_plan"),
+        call("finish", explanation="Done."),
+    ]), guide)
+    agent.run("plan my day", "Jordan", 60, on=DAY, on_progress=lambda s, m: seen.append((s, m)))
+
+    assert seen[0] == (1, "Waiting for Gemini...")
+    assert (1, "Added Mochi") in seen
+    rejected = [m for s, m in seen if s == 2 and m.startswith("Added 'Walk' for Mochi (rejected:")]
+    assert rejected, seen
+    assert seen[-1] == (4, "Writing up the plan")
+
+
+@pytest.mark.parametrize(
+    "setting, expected",
+    [(None, "LOW"), ("minimal", "MINIMAL"), ("HIGH", "HIGH"), ("default", None)],
+)
+def test_gemini_client_speed_settings(monkeypatch, setting, expected):
+    pytest.importorskip("google.genai")
+    from pawpal_agent import GEMINI_RETRY_ATTEMPTS, GEMINI_TIMEOUT_MS, GeminiClient
+
+    if setting is None:
+        monkeypatch.delenv("PAWPAL_GEMINI_THINKING", raising=False)
+    else:
+        monkeypatch.setenv("PAWPAL_GEMINI_THINKING", setting)
+    client = GeminiClient(api_key="test-key")  # builds the client; no network call
+
+    level = client._thinking.thinking_level if client._thinking else None
+    assert (getattr(level, "value", level) if level else None) == expected
+    options = client._client._api_client._http_options
+    assert options.timeout == GEMINI_TIMEOUT_MS
+    assert options.retry_options.attempts == GEMINI_RETRY_ATTEMPTS
+
+
+class Overloaded(Exception):
+    """Shaped like google.genai.errors.APIError: carries an HTTP status code."""
+
+    def __init__(self, code: int):
+        super().__init__(f"{code} UNAVAILABLE")
+        self.code = code
+
+
+class FakeModels:
+    """Stands in for client.models: fails for the models listed in `down`."""
+
+    def __init__(self, down: dict[str, int]):
+        self.down = down
+        self.tried: list[str] = []
+
+    def generate_content(self, model, contents, config):
+        from google.genai import types
+
+        self.tried.append(model)
+        if model in self.down:
+            raise Overloaded(self.down[model])
+        part = types.Part.from_text(text=f"answer from {model} [1]")
+        return types.GenerateContentResponse(
+            candidates=[types.Candidate(content=types.Content(role="model", parts=[part]))]
+        )
+
+
+@pytest.fixture
+def gemini(monkeypatch):
+    """A GeminiClient whose SDK calls go to FakeModels, with a clean cooldown."""
+    pytest.importorskip("google.genai")
+    import pawpal_agent
+
+    monkeypatch.setattr(pawpal_agent, "_overloaded_until", {})
+    monkeypatch.delenv("PAWPAL_GEMINI_MODEL", raising=False)
+    monkeypatch.setenv("PAWPAL_GEMINI_FALLBACK_MODELS", "lite-a,lite-b")
+
+    def make(down: dict[str, int]):
+        client = pawpal_agent.GeminiClient(api_key="test-key")
+        client._client = SimpleNamespace(models=FakeModels(down))
+        return client
+
+    return make
+
+
+def test_gemini_falls_back_when_the_main_model_is_overloaded(gemini):
+    from pawpal_agent import DEFAULT_GEMINI_MODEL
+
+    client = gemini({DEFAULT_GEMINI_MODEL: 503, "lite-a": 504})
+    assert client.generate("system", "question") == "answer from lite-b [1]"
+    assert client._client.models.tried == [DEFAULT_GEMINI_MODEL, "lite-a", "lite-b"]
+    # A new client (the next request) skips the models that are cooling down.
+    assert gemini({}).model == "lite-b"
+
+
+def test_gemini_does_not_switch_models_mid_run(gemini):
+    from pawpal_agent import DEFAULT_GEMINI_MODEL, LLMError
+
+    client = gemini({DEFAULT_GEMINI_MODEL: 503})
+    history = [
+        {"role": "user", "text": "plan my day"},
+        {"role": "model", "turn": ModelTurn(text="thinking")},
+    ]
+    with pytest.raises(LLMError, match="503"):
+        client.next_step("system", history, [])
+    assert client._client.models.tried == [DEFAULT_GEMINI_MODEL]
+
+
+def test_gemini_reports_errors_that_are_not_overload(gemini):
+    from pawpal_agent import DEFAULT_GEMINI_MODEL, LLMError
+
+    client = gemini({DEFAULT_GEMINI_MODEL: 400})
+    with pytest.raises(LLMError, match="400"):
+        client.generate("system", "question")
+    assert client._client.models.tried == [DEFAULT_GEMINI_MODEL]

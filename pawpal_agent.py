@@ -23,7 +23,7 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from datetime import date
-from typing import Any, Protocol
+from typing import Any, Callable, Protocol
 
 from pawpal_guardrails import (
     MAX_EXPLANATION_CHARS,
@@ -58,6 +58,28 @@ MAX_CALLS_PER_TURN = 12  # tool calls beyond this in one turn are refused
 MAX_REPEATED_ERRORS = 3  # the same failing call this many times ends the run
 
 DEFAULT_GEMINI_MODEL = "gemini-3.8-flash"
+# Speed settings for every Gemini call. Each plan is many round trips, so
+# per-call latency adds up:
+#   * thinking: picking the next tool call needs little reasoning, and the
+#     model's default level made multi-step plans take minutes. Override with
+#     PAWPAL_GEMINI_THINKING (minimal, low, medium, high, or "default" to leave
+#     it to the model).
+#   * timeout + retries: a stuck call fails in under a minute instead of
+#     hanging, and a "high demand" 503 or a 429 is retried twice, quickly.
+#   * fallback: when the main model is overloaded (429/5xx or a timeout), switch
+#     to a lighter model rather than fail. Lite models were answering in under
+#     a second while every full Flash model returned 503s. Override with
+#     PAWPAL_GEMINI_FALLBACK_MODELS (comma-separated; empty turns it off). An
+#     overloaded model is skipped for OVERLOAD_COOLDOWN_SECONDS so each new
+#     request doesn't wait on it again.
+DEFAULT_GEMINI_THINKING = "low"
+DEFAULT_GEMINI_FALLBACKS = "gemini-3.5-flash-lite,gemini-3.1-flash-lite"
+GEMINI_TIMEOUT_MS = 30_000
+GEMINI_RETRY_ATTEMPTS = 2  # including the first try; the fallback is the next resort
+GEMINI_RETRY_CODES = (429, 500, 503)
+OVERLOAD_CODES = (429, 500, 502, 503, 504)
+OVERLOAD_COOLDOWN_SECONDS = 300
+_overloaded_until: dict[str, float] = {}  # model -> monotonic time it may be tried again
 
 log = get_logger("agent")
 
@@ -572,8 +594,13 @@ class PlanningAgent:
         available_minutes: int,
         existing_pets: list[Pet] | None = None,
         on: date | None = None,
+        on_progress: Callable[[int, str], None] | None = None,
     ) -> AgentResult:
         """Turn the owner's description into pets, tasks and a checked plan.
+
+        on_progress, if given, is called as on_progress(step, message) before
+        each model call and after each tool call, so a UI can show the run
+        moving instead of a bare spinner.
 
         The pets passed in are never modified; the result carries a new list.
         LLMError propagates, so a failed call leaves the caller's data alone.
@@ -593,7 +620,12 @@ class PlanningAgent:
         stopped_reason = "max_steps"
         error_counts: dict[str, int] = {}
 
+        def progress(step: int, message: str) -> None:
+            if on_progress is not None:
+                on_progress(step, message)
+
         for step in range(1, self.max_steps + 1):
+            progress(step, "Waiting for Gemini...")
             started = time.perf_counter()
             try:
                 turn = self.llm.next_step(SYSTEM_PROMPT, messages, TOOL_SPECS)
@@ -622,6 +654,7 @@ class PlanningAgent:
                     result = tools.dispatch(call.name, call.args)
                 results.append((call, result))
                 trace.append(TraceStep(step, call.name, dict(call.args or {}), _outcome(result)))
+                progress(step, describe_call(call, result))
                 if "error" in result:
                     log.warning("[run %s] step %d: %s %s -> %s", run_id, step, call.name,
                                 json.dumps(call.args, default=str), result["error"])
@@ -779,6 +812,23 @@ def _outcome(result: dict) -> str:
     return "ok " + json.dumps(shown, default=str) if shown else "ok"
 
 
+def describe_call(call: ToolCall, result: dict) -> str:
+    """A short, owner-friendly line for one tool call, for live progress."""
+    args = call.args or {}
+    title, pet = args.get("title", ""), args.get("pet_name", "")
+    text = {
+        "search_care_guide": f"Searched the care guide for '{args.get('query', '')}'",
+        "set_time_budget": f"Set the time budget to {args.get('minutes')} min",
+        "add_pet": f"Added {args.get('name', 'a pet')}",
+        "add_task": f"Added '{title}' for {pet}",
+        "update_task": f"Updated '{title}' for {pet}",
+        "remove_task": f"Removed '{title}' for {pet}",
+        "build_plan": "Built the schedule",
+        "finish": "Writing up the plan",
+    }.get(call.name, call.name)
+    return f"{text} (rejected: {result['error']})" if "error" in result else text
+
+
 # --- Gemini adapter --------------------------------------------------------------
 
 
@@ -802,13 +852,60 @@ class GeminiClient:
         if not key:
             raise LLMError("Set GEMINI_API_KEY to use the AI planner.")
         self._types = types
-        self._client = genai.Client(api_key=key)
-        self.model = model or os.environ.get("PAWPAL_GEMINI_MODEL", DEFAULT_GEMINI_MODEL)
+        self._client = genai.Client(
+            api_key=key,
+            http_options=types.HttpOptions(
+                timeout=GEMINI_TIMEOUT_MS,
+                retry_options=types.HttpRetryOptions(
+                    attempts=GEMINI_RETRY_ATTEMPTS,
+                    initial_delay=1.0,
+                    max_delay=4.0,
+                    http_status_codes=list(GEMINI_RETRY_CODES),
+                ),
+            ),
+        )
+        primary = model or os.environ.get("PAWPAL_GEMINI_MODEL", DEFAULT_GEMINI_MODEL)
+        fallbacks = os.environ.get("PAWPAL_GEMINI_FALLBACK_MODELS", DEFAULT_GEMINI_FALLBACKS)
+        self.models = list(dict.fromkeys(
+            [primary] + [name.strip() for name in fallbacks.split(",") if name.strip()]
+        ))
+        # Start with the first model not cooling down after an overload.
+        now = time.monotonic()
+        self.model = next(
+            (name for name in self.models if _overloaded_until.get(name, 0) <= now), self.models[-1]
+        )
+        level = os.environ.get("PAWPAL_GEMINI_THINKING", DEFAULT_GEMINI_THINKING).strip().upper()
+        self._thinking = (
+            None if level in ("", "DEFAULT") else types.ThinkingConfig(thinking_level=level)
+        )
+
+    def _generate(self, can_switch: bool, **request):
+        """generate_content on the current model, moving down the fallback list
+        when a model is overloaded. Sticks with the model that worked, so one
+        planning run uses one model (Gemini's thought signatures from one model
+        are not replayed to another): can_switch is False once a run has started.
+        """
+        while True:
+            try:
+                return self._client.models.generate_content(model=self.model, **request)
+            except Exception as exc:  # network, auth, quota, bad model name
+                code = getattr(exc, "code", None)
+                timed_out = "timeout" in type(exc).__name__.lower()
+                position = self.models.index(self.model)
+                if (code in OVERLOAD_CODES or timed_out) and can_switch and position + 1 < len(self.models):
+                    _overloaded_until[self.model] = time.monotonic() + OVERLOAD_COOLDOWN_SECONDS
+                    next_model = self.models[position + 1]
+                    log.warning("%s unavailable (%s); falling back to %s", self.model,
+                                code or type(exc).__name__, next_model)
+                    self.model = next_model
+                    continue
+                raise LLMError(f"Gemini request failed ({self.model}): {exc}") from exc
 
     def next_step(self, system: str, messages: list[dict], tools: list[dict]) -> ModelTurn:
         types = self._types
         config = types.GenerateContentConfig(
             system_instruction=system,
+            thinking_config=self._thinking,
             tools=[
                 types.Tool(
                     function_declarations=[
@@ -823,14 +920,11 @@ class GeminiClient:
             ],
             automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
         )
-        try:
-            response = self._client.models.generate_content(
-                model=self.model,
-                contents=[self._content(message) for message in messages],
-                config=config,
-            )
-        except Exception as exc:  # network, auth, quota, bad model name
-            raise LLMError(f"Gemini request failed: {exc}") from exc
+        response = self._generate(
+            can_switch=not any(message["role"] == "model" for message in messages),
+            contents=[self._content(message) for message in messages],
+            config=config,
+        )
 
         candidate = response.candidates[0] if response.candidates else None
         content = candidate.content if candidate else None
@@ -851,14 +945,13 @@ class GeminiClient:
     def generate(self, system: str, prompt: str) -> str:
         """Plain text generation with no tools, for Ask the care guide."""
         types = self._types
-        try:
-            response = self._client.models.generate_content(
-                model=self.model,
-                contents=prompt,
-                config=types.GenerateContentConfig(system_instruction=system),
-            )
-        except Exception as exc:  # network, auth, quota, bad model name
-            raise LLMError(f"Gemini request failed: {exc}") from exc
+        response = self._generate(
+            can_switch=True,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                system_instruction=system, thinking_config=self._thinking
+            ),
+        )
         candidate = response.candidates[0] if response.candidates else None
         parts = candidate.content.parts if candidate and candidate.content else None
         text = "".join(

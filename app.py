@@ -367,17 +367,34 @@ with st.expander("✨ Plan with AI", expanded=not pets):
         elif ai_call_allowed("planner"):
             pets_before = len(pets)
             tasks_before = sum(len(pet.tasks) for pet in pets)
-            with st.spinner("Reading the care guide and building your plan..."):
+            # A plan is several Gemini round trips, so show each step as it
+            # happens rather than one spinner that looks stuck.
+            with st.status("Planning your day...", expanded=True) as status:
+                def show_progress(step: int, message: str) -> None:
+                    status.update(label=f"Step {step}: {message}")
+                    if not message.startswith("Waiting"):
+                        st.write(f"{step}. {message}")
+
+                client = None
                 try:
-                    agent = PlanningAgent(GeminiClient(), load_knowledge(), task_model=task_model)
-                    result = agent.run(check.text, owner.name, available_minutes, pets)
+                    client = GeminiClient()
+                    agent = PlanningAgent(client, load_knowledge(), task_model=task_model)
+                    result = agent.run(
+                        check.text, owner.name, available_minutes, pets, on_progress=show_progress
+                    )
                 except GuardrailError as exc:
+                    status.update(label="Not sent", state="error")
                     st.warning(str(exc))
                 except LLMError as exc:
                     # The agent works on a copy, so a failed run changes nothing.
                     log.error("planner failed: %s", exc)
+                    status.update(label="Planning failed", state="error")
                     st.error(str(exc))
                 else:
+                    model = getattr(client, "model", None)  # tests use a fake without one
+                    status.update(
+                        label=f"Plan ready ({model})" if model else "Plan ready", state="complete"
+                    )
                     st.session_state.pets = result.pets
                     st.session_state.ai_result = result
                     st.session_state.ai_summary = (
