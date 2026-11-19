@@ -186,10 +186,9 @@ an API key. Example 1 needs a Gemini key.
 
 **Output:**
 
-> 📝 **To fill in:** run this request with your Gemini key and paste three
-> things here: the summary line, the assistant's explanation, and the
-> *Why this plan?* step table. Then add a screenshot of the resulting
-> 📅 Today plan to `assets/` and link it.
+> 📝 Based on the dog exercise and senior pet kidney disease care guides, Mochi's morning walk is set to 40 minutes (fitting the 30-45 minute sensible anchor for a high-energy adult husky) and Luna's kidney meds are scheduled for 08:00 as requested, taking 5 minutes. Luna's vet visit is scheduled as a fixed task at 10:00 for 30 minutes. All tasks fit perfectly within your 75-minute time budget for the day.
+
+
 
 **What to look for in the output:**
 - The agent searches the guide (e.g. "husky exercise", "senior cat kidney")
