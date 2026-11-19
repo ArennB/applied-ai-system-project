@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 from streamlit.testing.v1 import AppTest
 
-import pawpal_agent
+import agent
 from test_agent import FakeLLM, call
 
 APP = str(Path(__file__).resolve().parent.parent / "app.py")
@@ -81,7 +81,6 @@ def test_task_over_budget_is_reported(app):
 def test_ai_run_fills_in_the_app(app, monkeypatch):
     monkeypatch.setenv("GEMINI_API_KEY", "test")
     script = [
-        call("search_care_guide", query="husky exercise"),
         call("set_time_budget", minutes=90),
         call("add_pet", name="Mochi", animal_type="dog"),
         call("add_task", pet_name="Mochi", title="Morning walk", duration_minutes=40,
@@ -89,7 +88,7 @@ def test_ai_run_fills_in_the_app(app, monkeypatch):
         call("build_plan"),
         call("finish", explanation="A long walk for a husky."),
     ]
-    monkeypatch.setattr(pawpal_agent, "GeminiClient", lambda: FakeLLM(script))
+    monkeypatch.setattr(agent, "GeminiClient", lambda: FakeLLM(script))
     app.run()
     app.text_area[0].input("Mochi is a husky, I have 90 minutes")
     labelled(app.button, "Plan it for me").click()
@@ -101,7 +100,7 @@ def test_ai_run_fills_in_the_app(app, monkeypatch):
     assert any("Added 1 pet(s) and 1 task(s)" in m.value for m in app.markdown)
     assert any(exp.label == "Why this plan?" for exp in app.expander)
     assert [box.label for box in app.main.checkbox] == ["**08:00–08:40** &nbsp; Morning walk — Mochi · 40 min"]
-    assert not app.warning  # the plan fits and the guide was used
+    assert not app.warning  # the plan fits, so the post-check has nothing to say
 
 
 def test_quick_add_uses_the_trained_model(app):
@@ -117,32 +116,8 @@ def test_quick_add_uses_the_trained_model(app):
     assert "📌" in app.main.checkbox[0].label
 
 
-def ask(app: AppTest, question: str) -> None:
-    labelled(app.text_input, "Question").input(question)
-    labelled(app.button, "Ask").click()
+def plan(app: AppTest, request: str) -> None:
+    """Type a request into Plan with AI and press the button."""
+    app.text_area[0].input(request)
+    labelled(app.button, "Plan it for me").click()
     app.run()
-
-
-def test_ask_the_guide_without_a_key_shows_passages(app):
-    ask(app, "How often should I bathe my dog?")
-    assert not app.exception
-    assert any("grooming.md › Bathing dogs" in m.value for m in app.markdown)
-
-
-def test_ask_the_guide_off_topic_is_not_covered(app):
-    ask(app, "What is the capital of France?")
-    assert any("doesn't cover that" in info.value for info in app.info)
-
-
-def test_ask_the_guide_with_a_model_shows_cited_answer(app, monkeypatch):
-    class Answering:
-        def generate(self, system, prompt):
-            return "Most dogs only need a bath every 4 to 8 weeks [1]."
-
-    monkeypatch.setenv("GEMINI_API_KEY", "test")
-    monkeypatch.setattr(pawpal_agent, "GeminiClient", lambda: Answering())
-    app.run()
-    ask(app, "How often should I bathe my dog?")
-    assert not app.exception
-    assert any("every 4 to 8 weeks [1]" in m.value for m in app.markdown)
-    assert any("**[1]** *grooming.md › Bathing dogs*" in m.value for m in app.markdown)

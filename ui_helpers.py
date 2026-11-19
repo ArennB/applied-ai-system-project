@@ -8,7 +8,7 @@ user changed in that table back onto the Task objects.
 
 from datetime import time
 
-from pawpal_system import Pet, Priority, Task, parse_time
+from scheduler import Pet, Priority, Task, parse_time
 
 MIN_MINUTES, MAX_MINUTES = 1, 240
 MAX_TITLE_CHARS = 80

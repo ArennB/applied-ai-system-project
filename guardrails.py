@@ -1,14 +1,11 @@
 """PawPal+ guardrails: checks on what goes into the AI and what comes out.
 
 The tools already validate every value the planning agent can set (see
-PlannerTools in pawpal_agent). This module covers the rest:
+PlannerTools in agent). This module covers the rest:
 
     input   check_input()        clean the text, cap its length, refuse prompt
                                  injection, and flag possible emergencies
     output  clean_model_text()   strip control characters, cap the length
-            unsupported_numbers() numbers in an answer that the guide never says
-            add_vet_note()       a vet reminder on any health answer, enforced
-                                 here rather than trusted to the prompt
     usage   RateLimiter          a cap on AI calls per session
 
 Everything here is plain Python with no model involved, so it is deterministic
@@ -23,17 +20,15 @@ from collections import deque
 from dataclasses import dataclass
 from typing import Callable
 
-from pawpal_logging import get_logger, preview
+from log_setup import get_logger, preview
 
 log = get_logger("guardrails")
 
-# Length caps. A day plan needs a paragraph, a question a sentence, a quick-add
-# line a few words; anything far longer is a paste accident or an attack.
+# Length caps. A day plan needs a paragraph and a quick-add line a few words;
+# anything far longer is a paste accident or an attack.
 MAX_REQUEST_CHARS = 2000
-MAX_QUESTION_CHARS = 300
 MAX_QUICK_ADD_CHARS = 120
 MAX_EXPLANATION_CHARS = 1500
-MAX_ANSWER_CHARS = 1200
 
 # Text that tries to talk to the model rather than describe pets. Phrased
 # narrowly so normal requests ("ignore the cat today, she's at the vet") pass.
@@ -52,7 +47,7 @@ _INJECTION = [
 
 # Signs the owner may be describing an emergency. These do not block anything:
 # the app shows a "call your vet now" banner above whatever PawPal says, because
-# a planner or a short care guide is the wrong tool in that moment.
+# a planning app is the wrong tool in that moment.
 _URGENT = re.compile(
     r"\b(?:poison(?:ed|ing)?|toxic|toxin|antifreeze|xylitol|rat\s+bait|chocolate|grapes?|raisins?"
     r"|lilies|not\s+breathing|(?:can'?t|cannot|trouble|struggling\s+to)\s+breath(?:e|ing)?"
@@ -66,13 +61,6 @@ URGENT_NOTICE = (
     "This sounds like it could be an emergency. If your pet may have eaten something"
     " toxic, is struggling to breathe, has collapsed or is badly hurt, call your vet or"
     " an emergency animal clinic now. Don't wait on an app."
-)
-
-VET_NOTE = "Follow your vet's advice for your own pet."
-_HEALTH = re.compile(
-    r"\b(?:medic\w*|meds|pills?|tablets?|dose|dosage|insulin|ill|illness|sick|disease|injur\w*"
-    r"|pain|vomit\w*|diarrh\w*|kidney|diabet\w*|arthritis|infection|symptoms?|vaccin\w*)\b",
-    re.I,
 )
 
 _CONTROL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f​-‏‪-‮⁦-⁩]")
@@ -123,7 +111,7 @@ def check_input(text: str, max_chars: int, kind: str = "request", screen_injecti
     Args:
         text: what the user typed.
         max_chars: the longest text accepted, after cleaning.
-        kind: what it is, for messages and logs ("request", "question", ...).
+        kind: what it is, for messages and logs ("request", "task", ...).
         screen_injection: refuse text that tries to instruct the model. Off for
             input that never reaches a language model, such as quick add.
     """
@@ -178,43 +166,6 @@ def clean_model_text(text: str, max_chars: int) -> str:
     shortened = cut[: end + 1] if end > max_chars // 2 else cut.rstrip() + "…"
     log.warning("model text cut from %d to %d chars", len(cleaned), len(shortened))
     return shortened
-
-
-_NUMBER = re.compile(r"(?<![\[\d.])\d+(?:\.\d+)?(?![\]\d])")
-
-
-def numbers_in(text: str) -> set[str]:
-    """The numbers written in the text, ignoring [n] citation markers.
-
-    Normalised so "8", "08" and "8.0" count as the same number.
-    """
-    return {format(float(match.group()), "g") for match in _NUMBER.finditer(text)}
-
-
-def unsupported_numbers(answer: str, sources: list[str]) -> list[str]:
-    """Numbers in the answer that appear in none of the source texts.
-
-    A grounded answer can rephrase the guide but should not invent a figure:
-    a duration, a frequency or, worst of all, a dose. Returned sorted so the
-    result is stable.
-    """
-    known: set[str] = set()
-    for source in sources:
-        known |= numbers_in(source)
-    return sorted(numbers_in(answer) - known, key=float)
-
-
-def mentions_health(text: str) -> bool:
-    """True if the text is about medication, illness or injury."""
-    return bool(_HEALTH.search(text))
-
-
-def add_vet_note(question: str, answer: str) -> str:
-    """The answer, with a vet reminder added if it touches on health and has none."""
-    if (mentions_health(question) or mentions_health(answer)) and not re.search(r"\bvets?\b", answer, re.I):
-        log.info("vet note added to answer")
-        return f"{answer.rstrip()} {VET_NOTE}"
-    return answer
 
 
 # --- Usage ---------------------------------------------------------------------------

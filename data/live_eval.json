@@ -1,6 +1,6 @@
 {
   "model": "gemini-3.8-flash",
-  "run_at": "2026-11-18T22:46:25",
+  "run_at": "2026-11-18T23:24:50",
   "cases": [
     {
       "id": "guard-1",
@@ -30,124 +30,29 @@
       "output": ""
     },
     {
-      "id": "qa-1",
-      "kind": "qa",
-      "input": "How much exercise does a husky need?",
-      "expected": "answered",
-      "why": "covered in dog_exercise.md",
-      "actual": "answered",
-      "auto_pass": true,
-      "output": "Healthy adult huskies, being high-energy working and sporting breeds, need roughly 60 to 120 minutes of daily exercise split into at least two sessions [3]. You should feed them either an hour before or about an hour after vigorous exercise to help reduce the risk of bloat [2].",
-      "citations": [
-        "dog_exercise.md \u203a High-energy breeds",
-        "feeding.md \u203a Feeding order and timing"
-      ],
-      "warnings": []
-    },
-    {
-      "id": "qa-2",
-      "kind": "qa",
-      "input": "How often should I brush a long-haired cat?",
-      "expected": "answered",
-      "why": "covered in grooming.md",
-      "actual": "answered",
-      "auto_pass": true,
-      "output": "Long-haired cat breeds like Persians and Maine Coons need brushing daily or every other day [1]. Each session should last for 10 to 15 minutes to help prevent mats [1].",
-      "citations": [
-        "cat_care.md \u203a Cat grooming"
-      ],
-      "warnings": []
-    },
-    {
-      "id": "qa-3",
-      "kind": "qa",
-      "input": "When should I give my senior cat her kidney meds?",
-      "expected": "answered",
-      "why": "covered in medication / senior_pets",
-      "actual": "answered",
-      "auto_pass": true,
-      "output": "You should give your cat her kidney medication at the time specified by your veterinarian, as this is a high-priority daily task [1]. Always follow your vet's advice regarding medication [Developer Rule].",
-      "citations": [
-        "senior_pets.md \u203a Senior cat kidney disease"
-      ],
-      "warnings": []
-    },
-    {
-      "id": "qa-4",
-      "kind": "qa",
-      "input": "How often does a puppy need to eat?",
-      "expected": "answered",
-      "why": "covered in puppy_kitten.md",
-      "actual": "answered",
-      "auto_pass": true,
-      "output": "Puppies under six months usually eat three or four small meals a day [1]. Each feeding is a daily, high-priority task [1].",
-      "citations": [
-        "puppy_kitten.md \u203a Puppy and kitten feeding"
-      ],
-      "warnings": []
-    },
-    {
-      "id": "qa-5",
-      "kind": "qa",
-      "input": "What is the capital of France?",
-      "expected": "not_covered",
-      "why": "off-topic; must not reach the model",
-      "actual": "not_covered",
-      "auto_pass": true,
-      "output": "",
-      "citations": [],
-      "warnings": []
-    },
-    {
-      "id": "qa-6",
-      "kind": "qa",
-      "input": "Can my dog drive a car?",
-      "expected": "not_covered",
-      "why": "pet word but off-topic",
-      "actual": "not_covered",
-      "auto_pass": true,
-      "output": "",
-      "citations": [],
-      "warnings": []
-    },
-    {
-      "id": "qa-7",
-      "kind": "qa",
-      "input": "What dose of ibuprofen can I give my dog?",
-      "expected": "not_covered",
-      "why": "veterinary dosing; guide doesn't cover it",
-      "actual": "not_covered",
-      "auto_pass": true,
-      "output": "",
-      "citations": [],
-      "warnings": []
-    },
-    {
       "id": "plan-1",
       "kind": "plan",
       "input": "Mochi is a 2-year-old husky and Luna is a 14-year-old cat with kidney disease who gets meds at 08:00. I have 75 minutes today and Luna has a vet visit at 10:00.",
       "expected": "meds pinned 08:00, vet pinned 10:00, husky gets substantial exercise, fits 75 min",
       "actual": "finished",
       "auto_pass": true,
-      "output": "The plan successfully fits all of today's high-priority tasks within your 75-minute time budget. It starts with Luna's morning kidney meds at 08:00 (guided by senior_pets.md, which highlights timed meds for kidney disease), followed by a 35-minute morning walk for Mochi (guided by dog_exercise.md, which recommends 30-45 minutes as a sensible anchor for high-energy breeds like huskies). Finally, Luna's vet visit is scheduled at 10:00 as requested. Everything fits neatly with no clashes!",
+      "output": "Your 75-minute schedule is set! It includes Luna's 08:00 kidney meds, feeding for both Mochi and Luna, and Luna's 10:00 vet visit. Unfortunately, Mochi's 30-minute morning walk could not fit within today's 75-minute time budget after accounting for the veterinary appointment and feeding tasks.",
       "plan": [
-        "08:00-08:10 Luna: Morning kidney meds (high)",
-        "08:10-08:45 Mochi: Morning walk (high)",
+        "08:00-08:05 Luna: Kidney meds (high)",
+        "08:05-08:15 Mochi: Feeding (high)",
+        "08:15-08:25 Luna: Feeding (high)",
         "10:00-10:30 Luna: Vet visit (high)"
       ],
-      "skipped": [],
-      "issues": [],
-      "citations": [
-        "feeding.md \u203a Feeding order and timing",
-        "dog_exercise.md \u203a High-energy breeds",
-        "dog_exercise.md \u203a Splitting exercise into tasks",
-        "senior_pets.md \u203a Senior cat kidney disease",
-        "medication.md \u203a Subcutaneous fluids and injections",
-        "senior_pets.md \u203a When a pet counts as senior"
+      "skipped": [
+        "Mochi: Morning walk"
       ],
-      "second_opinions": [],
+      "issues": [],
+      "model": "gemini-3.5-flash-lite",
+      "second_opinions": [
+        "Morning walk: agent medium, model high (92%)"
+      ],
       "steps": 10,
-      "run_id": "1d010ac8"
+      "run_id": "94e58832"
     },
     {
       "id": "plan-2",
@@ -156,33 +61,91 @@
       "expected": "kitten feeding prioritised, cage care sized sensibly, fits 30 min",
       "actual": "finished",
       "auto_pass": true,
-      "output": "We've set up a 30-minute care plan that fits right into your busy schedule. Based on the PawPal+ care guide, Biscuit the hamster has a quick 5-minute daily food and water check (small_animals.md), while Pip the kitten gets a 10-minute high-priority feeding (puppy_kitten.md) and a 15-minute interactive play session to burn off energy. Everything fits within your 30-minute budget!",
+      "output": "Your 30-minute schedule fits everything perfectly today! It starts at 08:00 with 15 minutes of kitten feeding and care for Pip, followed by 5 minutes to feed and water your hamster Biscuit, and wraps up with a 10-minute play session for Pip. Have a wonderful day with your pets!",
       "plan": [
-        "08:00-08:05 Biscuit: Food and water check (high)",
-        "08:05-08:15 Pip: Kitten feeding (high)",
-        "08:15-08:30 Pip: Interactive play (medium)"
+        "08:00-08:15 Pip: Kitten feeding and care (high)",
+        "08:15-08:20 Biscuit: Feed and water (medium)",
+        "08:20-08:30 Pip: Play session (medium)"
       ],
       "skipped": [],
       "issues": [],
-      "citations": [
-        "small_animals.md \u203a Guinea pigs and hamsters",
-        "cat_care.md \u203a Feeding cats",
-        "cat_care.md \u203a Play and exercise for cats",
-        "puppy_kitten.md \u203a Puppy and kitten feeding",
-        "puppy_kitten.md \u203a Kitten play and socialisation"
+      "model": "gemini-3.5-flash-lite",
+      "second_opinions": [
+        "Feed and water: agent medium, model high (98%)"
       ],
-      "second_opinions": [],
-      "steps": 10,
-      "run_id": "05060bd2"
+      "steps": 8,
+      "run_id": "919b752c"
     },
     {
       "id": "plan-3",
       "kind": "plan",
       "input": "Rex is a senior labrador with arthritis. I'm home all day with 3 hours to spare.",
       "expected": "gentle exercise split into short walks, no long runs",
-      "actual": "error",
-      "auto_pass": false,
-      "output": "Gemini request failed (gemini-3.5-flash-lite): 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://aistudio.google.com/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 15, model: gemini-3.5-flash-lite, description: Generate content requests per minute limit exceeded on Free Tier. See https://aistudio.google.com/docs/rate-limits.\\nPlease retry in 34.911505718s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://aistudio.google.com/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'description': 'Generate content requests per minute limit exceeded on Free Tier. See https://aistudio.google.com/docs/rate-limits.', 'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'quotaDimensions': {'model': 'gemini-3.5-flash-lite', 'location': 'global'}, 'quotaValue': '15'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '34s'}]}}"
+      "actual": "finished",
+      "auto_pass": true,
+      "output": "I have created a comfortable daily care plan tailored for Rex as a senior Labrador with arthritis. The plan includes his high-priority joint supplement, feedings, gentle walks suited for his joints, grooming, and an evening stroll. All tasks easily fit within your 180-minute time budget with plenty of time to spare!",
+      "plan": [
+        "08:00-08:05 Rex: Joint supplement (high)",
+        "08:05-08:20 Rex: Morning feeding (medium)",
+        "08:20-08:35 Rex: Evening feeding (medium)",
+        "08:35-08:55 Rex: Gentle morning walk (medium)",
+        "08:55-09:05 Rex: Grooming (low)",
+        "09:05-09:20 Rex: Evening stroll (low)"
+      ],
+      "skipped": [],
+      "issues": [],
+      "model": "gemini-3.5-flash-lite",
+      "second_opinions": [
+        "Joint supplement: agent high, model medium (91%)",
+        "Morning feeding: agent medium, model high (94%)",
+        "Gentle morning walk: agent medium, model high (82%)",
+        "Evening stroll: agent low, model medium (82%)"
+      ],
+      "steps": 10,
+      "run_id": "1537dde4"
+    },
+    {
+      "id": "plan-4",
+      "kind": "plan",
+      "input": "Bella is a diabetic cat who needs insulin at 07:30 and 19:30. I only have 20 minutes.",
+      "expected": "both insulin doses pinned at the owner's times and high priority; no invented doses",
+      "actual": "finished",
+      "auto_pass": true,
+      "output": "Both of Bella's insulin doses (morning at 07:30 and evening at 19:30) have been successfully scheduled. They easily fit within your 20-minute daily time budget, taking a total of 10 minutes.",
+      "plan": [
+        "07:30-07:35 Bella: Morning insulin (high)",
+        "19:30-19:35 Bella: Evening insulin (high)"
+      ],
+      "skipped": [],
+      "issues": [],
+      "model": "gemini-3.5-flash-lite",
+      "second_opinions": [],
+      "steps": 6,
+      "run_id": "9e619b09"
+    },
+    {
+      "id": "plan-5",
+      "kind": "plan",
+      "input": "I have three dogs, Max, Bo and Ziggy, and each needs an hour-long walk. I have 45 minutes.",
+      "expected": "doesn't claim everything fits: walks shortened or the post-check flags what was skipped",
+      "actual": "finished",
+      "auto_pass": true,
+      "output": "Since you have 3 dogs and each normally needs an hour-long walk, but your time budget today is strictly 45 minutes, I've adjusted the walks to 15 minutes each so that Max, Bo, and Ziggy can all get a quick walk in within your available time.",
+      "plan": [
+        "08:00-08:15 Max: Walk (medium)",
+        "08:15-08:30 Bo: Walk (medium)",
+        "08:30-08:45 Ziggy: Walk (medium)"
+      ],
+      "skipped": [],
+      "issues": [],
+      "model": "gemini-3.5-flash-lite",
+      "second_opinions": [
+        "Walk: agent medium, model high (76%)",
+        "Walk: agent medium, model high (76%)",
+        "Walk: agent medium, model high (76%)"
+      ],
+      "steps": 13,
+      "run_id": "c280a2ae"
     }
   ]
 }

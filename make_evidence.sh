@@ -4,7 +4,7 @@
 #   ./make_evidence.sh
 #
 # Each command's output (stdout and stderr) is saved as a .txt file, and the
-# log the runs wrote is copied to evidence/pawpal_log_sample.txt.
+# log the runs wrote is copied to evidence/log_sample.txt.
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -37,10 +37,10 @@ SHOWN="$PYTHON -m pytest -v" \
 run tests        env PAWPAL_LOG_DIR="$TEST_LOG_DIR" "$PYTHON" -m pytest -v -p no:cacheprovider
 rm -rf "$TEST_LOG_DIR"
 run demo_offline "$PYTHON" demo_offline.py
-run model_eval   "$PYTHON" -m pawpal_model
+run model_eval   "$PYTHON" -m task_model
 run scheduler    "$PYTHON" main.py
 
-cp "$LOG_DIR/pawpal.log" "$OUT/pawpal_log_sample.txt"
+cp "$LOG_DIR/pawpal.log" "$OUT/log_sample.txt"
 rm -rf "$LOG_DIR"
 
 # Show paths relative to the project, not this machine's home folder.

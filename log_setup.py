@@ -14,8 +14,9 @@ Where records go once setup_logging() has run:
 What is logged, and what is not:
     - every agent run (with a short run id tying its lines together), each
       model call's latency, each tool call and its outcome, the post-check
-    - every care-guide question: retrieval scores, the gate decision, status
-    - every guardrail that fires (blocked input, flagged output, rate limit)
+    - quick adds and manual task changes in the app
+    - every guardrail that fires (blocked input, emergency flag, rate limit)
+    - model fallbacks when Gemini is overloaded
     - user text only as a short one-line preview (see preview()); API keys
       never, since nothing here ever sees one
 """

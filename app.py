@@ -3,17 +3,16 @@
 Layout:
     Sidebar  - your day (name, time available), pets, quick add (trained task
                model) or a detailed task form, how it works
-    Main     - Plan with AI (agent), Ask the care guide (RAG Q&A), then today's
-               live plan with tick-to-complete, what didn't fit, done today,
+    Main     - Plan with AI (agent), then today's live plan with tick-to-complete, what didn't fit, done today,
                coming up, and a task editor
 
 The plan is rebuilt from the scheduler on every rerun, so there is exactly one
 plan on screen and it is always current.
 
 Guardrails: every text box has a length cap, anything sent to the AI is first
-checked by pawpal_guardrails (cleaned, injection-screened, emergency-flagged),
+checked by guardrails (cleaned, injection-screened, emergency-flagged),
 and each session may make at most AI_CALLS_PER_WINDOW AI calls per window.
-Activity is logged to logs/pawpal.log (see pawpal_logging).
+Activity is logged to logs/pawpal.log (see log_setup).
 """
 
 import os
@@ -28,9 +27,8 @@ from dotenv import load_dotenv
 if not os.environ.get("PAWPAL_SKIP_DOTENV"):
     load_dotenv()
 
-from pawpal_agent import GeminiClient, LLMError, PlanningAgent, gemini_api_key
-from pawpal_guardrails import (
-    MAX_QUESTION_CHARS,
+from agent import GeminiClient, LLMError, PlanningAgent, gemini_api_key
+from guardrails import (
     MAX_QUICK_ADD_CHARS,
     MAX_REQUEST_CHARS,
     URGENT_NOTICE,
@@ -38,11 +36,9 @@ from pawpal_guardrails import (
     RateLimiter,
     check_input,
 )
-from pawpal_logging import get_logger, preview, setup_logging
-from pawpal_qa import CareGuideQA, QAResult
-from pawpal_rag import KnowledgeBase
-from pawpal_system import Owner, Pet, Priority, Scheduler, Task
-from pawpal_ui import MAX_TITLE_CHARS, apply_task_edits, editor_rows, task_label, to_minutes
+from log_setup import get_logger, preview, setup_logging
+from scheduler import Owner, Pet, Priority, Scheduler, Task
+from ui_helpers import MAX_TITLE_CHARS, apply_task_edits, editor_rows, task_label, to_minutes
 
 st.set_page_config(page_title="PawPal+", page_icon="🐾", layout="centered")
 setup_logging()
@@ -55,7 +51,7 @@ PRIORITIES = ["low", "medium", "high"]
 FREQUENCIES = ["once", "daily", "weekly"]
 # Maps the status filter onto filter_tasks' is_completed, where None means "any".
 STATUS_FILTERS = {"All": None, "To do": False, "Done": True}
-# Per-session cap on Gemini calls (planner and Ask combined).
+# Per-session cap on Gemini calls.
 AI_CALLS_PER_WINDOW, AI_WINDOW_SECONDS = 10, 300
 MAX_NAME_CHARS = 40
 
@@ -78,12 +74,6 @@ def clear_done_keys() -> None:
 
 
 @st.cache_resource
-def load_knowledge() -> KnowledgeBase:
-    """The care guide in knowledge/, indexed once per server process."""
-    return KnowledgeBase.from_directory()
-
-
-@st.cache_resource
 def load_task_model():
     """The trained task model, or None if it cannot be built here.
 
@@ -92,18 +82,12 @@ def load_task_model():
     model-backed features off rather than breaking the app.
     """
     try:
-        from pawpal_model import TaskModel
+        from task_model import TaskModel
 
         return TaskModel.train()
     except (ImportError, OSError, ValueError) as exc:
         log.warning("task model unavailable, quick add and second opinions off: %s", exc)
         return None
-
-
-def show_passage(number: int, passage) -> None:
-    """One care-guide passage, numbered to match the answer's [n] citations."""
-    st.markdown(f"**[{number}]** *{passage.cite()}*")
-    st.caption(passage.text)
 
 
 def ai_call_allowed(what: str) -> bool:
@@ -122,36 +106,6 @@ def flag_if_urgent(check) -> None:
     """Remember that the user may be describing an emergency, for the banner."""
     if check.urgent:
         st.session_state.urgent = True
-
-
-def show_qa(result: QAResult) -> None:
-    """Render an Ask the care guide result according to how grounded it is."""
-    if result.status == "blocked":
-        st.warning(result.answer)
-    elif result.status == "not_covered":
-        st.info(
-            "The care guide doesn't cover that, so PawPal won't guess."
-            " For anything about your pet's health, ask your vet."
-        )
-    elif result.status == "retrieval_only":
-        st.caption(
-            "Here's what the care guide says."
-            + ("" if gemini_api_key() else " Set GEMINI_API_KEY to get a written answer as well.")
-        )
-        for number, passage in enumerate(result.passages, start=1):
-            show_passage(number, passage)
-    elif result.status == "ungrounded":
-        for warning in result.warnings or ["This answer may not come from the care guide."]:
-            st.warning(f"{warning} The passages are below.")
-        st.write(result.answer)
-        for number, passage in enumerate(result.passages, start=1):
-            show_passage(number, passage)
-    else:
-        st.write(result.answer)
-        st.markdown("**Sources**")
-        for number, passage in enumerate(result.passages, start=1):
-            if any(passage is cited for cited in result.citations):
-                show_passage(number, passage)
 
 
 # Pets accumulate across interactions, so they live in session_state to survive
@@ -231,8 +185,8 @@ with st.sidebar:
                     if not check.allowed:
                         st.warning(check.reason)
                     else:
-                        # Imported here: pawpal_model needs scikit-learn, which is optional.
-                        from pawpal_model import parse_quick_add
+                        # Imported here: task_model needs scikit-learn, which is optional.
+                        from task_model import parse_quick_add
 
                         parsed = parse_quick_add(check.text)
                         target = next(pet for pet in pets if pet.name == quick_pet)
@@ -378,7 +332,7 @@ with st.expander("✨ Plan with AI", expanded=not pets):
                 client = None
                 try:
                     client = GeminiClient()
-                    agent = PlanningAgent(client, load_knowledge(), task_model=task_model)
+                    agent = PlanningAgent(client, task_model=task_model)
                     result = agent.run(
                         check.text, owner.name, available_minutes, pets, on_progress=show_progress
                     )
@@ -429,12 +383,6 @@ if ai_result is not None:
                 " differently. See Why this plan?"
             )
         with st.expander("Why this plan?"):
-            st.markdown("**From the care guide**")
-            if not ai_result.citations:
-                st.caption("The assistant didn't look anything up.")
-            for passage in ai_result.citations:
-                st.markdown(f"*{passage.cite()}*")
-                st.caption(passage.text)
             st.markdown("**What the assistant did**")
             st.dataframe(
                 [
@@ -464,33 +412,6 @@ if ai_result is not None:
                     ],
                     hide_index=True,
                 )
-
-with st.expander("📖 Ask the care guide"):
-    with st.form("ask_guide", border=False):
-        question = st.text_input(
-            "Question",
-            placeholder="e.g. How often should I brush a long-haired cat?",
-            label_visibility="collapsed",
-            max_chars=MAX_QUESTION_CHARS,
-        )
-        asked = st.form_submit_button("Ask")
-    if asked and question.strip():
-        check = check_input(question, MAX_QUESTION_CHARS, "question")
-        flag_if_urgent(check)
-        # Only spend an AI call if the question passes the input guardrails;
-        # otherwise ask() answers it (blocked, or passages only) without one.
-        use_model = api_key_present and check.allowed and ai_call_allowed("question")
-        with st.spinner("Looking it up..."):
-            try:
-                qa = CareGuideQA(load_knowledge(), GeminiClient() if use_model else None)
-                st.session_state.qa_result = qa.ask(check.text)
-            except LLMError as exc:
-                log.error("question failed: %s", exc)
-                st.error(str(exc))
-        if check.urgent:
-            st.rerun()  # show the emergency banner at the top straight away
-    if "qa_result" in st.session_state:
-        show_qa(st.session_state.qa_result)
 
 # --- Main: today's live plan ------------------------------------------------------
 

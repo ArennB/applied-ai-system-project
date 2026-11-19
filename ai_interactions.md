@@ -29,6 +29,14 @@ TF-IDF retrieval and a new "Plan with AI" section in the Streamlit app.
    with Streamlit's `AppTest` to check the no-key path and a full agent run.
 7. Updated `README.md`, `requirements.txt` and `diagrams/uml_final.mmd`.
 
+**Later changes.** I later decided the retrieval part was more than this
+project needed and removed it: the care guide, `pawpal_rag.py`, the separate
+"Ask the care guide" Q&A (`pawpal_qa.py`) and the agent's search tool. The
+agent, the scheduler and the plan checks stayed. I also renamed the modules to
+drop the `pawpal_` prefix (`pawpal_system.py` is now `scheduler.py`,
+`pawpal_agent.py` is `agent.py`, and so on). File names above are as they were
+at the time.
+
 **What did you have to verify or fix manually?**
 
 <!-- Describe anything the agent got wrong or that required human review -->

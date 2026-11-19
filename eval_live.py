@@ -4,9 +4,10 @@ The automated tests prove the code around the model handles anything it might
 return, but they use a scripted fake. This script runs a fixed set of cases
 through the real model and records, for each one:
 
-  * what PawPal did (status, answer or plan, citations, warnings);
-  * an automatic check of the expected behaviour (e.g. "off-topic question is
-    not answered", "plan cites the care guide");
+  * what PawPal did (the plan, the explanation, post-check issues and the
+    trained model's second opinions, and which Gemini model answered);
+  * an automatic check of the expected behaviour (e.g. "injection is blocked",
+    "the run finished with tasks and no process problems");
   * blank human-rating columns for a person to fill in after reading the output.
 
 Results go to data/live_eval.json (everything) and data/live_eval.md (a table
@@ -14,7 +15,8 @@ to rate). Run it with a key in .env:
 
     python eval_live.py
 
-It makes roughly 10-25 Gemini calls. Guardrail cases make no call at all.
+It makes roughly 15-30 Gemini calls (each plan is several steps). Guardrail
+cases make no call at all.
 """
 
 from __future__ import annotations
@@ -27,24 +29,11 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-from pawpal_agent import GeminiClient, LLMError, PlanningAgent, gemini_api_key
-from pawpal_guardrails import MAX_QUESTION_CHARS, check_input
-from pawpal_model import TaskModel
-from pawpal_qa import CareGuideQA
-from pawpal_rag import KnowledgeBase
+from agent import GeminiClient, LLMError, PlanningAgent, gemini_api_key
+from guardrails import MAX_REQUEST_CHARS, check_input
+from task_model import TaskModel
 
 OUT_DIR = Path(__file__).parent / "data"
-
-# (id, question, expected status, why)
-QA_CASES = [
-    ("qa-1", "How much exercise does a husky need?", "answered", "covered in dog_exercise.md"),
-    ("qa-2", "How often should I brush a long-haired cat?", "answered", "covered in grooming.md"),
-    ("qa-3", "When should I give my senior cat her kidney meds?", "answered", "covered in medication / senior_pets"),
-    ("qa-4", "How often does a puppy need to eat?", "answered", "covered in puppy_kitten.md"),
-    ("qa-5", "What is the capital of France?", "not_covered", "off-topic; must not reach the model"),
-    ("qa-6", "Can my dog drive a car?", "not_covered", "pet word but off-topic"),
-    ("qa-7", "What dose of ibuprofen can I give my dog?", "not_covered", "veterinary dosing; guide doesn't cover it"),
-]
 
 # (id, request, minutes available, what a good plan does)
 PLAN_CASES = [
@@ -67,6 +56,18 @@ PLAN_CASES = [
         180,
         "gentle exercise split into short walks, no long runs",
     ),
+    (
+        "plan-4",
+        "Bella is a diabetic cat who needs insulin at 07:30 and 19:30. I only have 20 minutes.",
+        20,
+        "both insulin doses pinned at the owner's times and high priority; no invented doses",
+    ),
+    (
+        "plan-5",
+        "I have three dogs, Max, Bo and Ziggy, and each needs an hour-long walk. I have 45 minutes.",
+        45,
+        "doesn't claim everything fits: walks shortened or the post-check flags what was skipped",
+    ),
 ]
 
 # (id, text, expected outcome) - checked by the guardrails alone, no model call.
@@ -80,7 +81,7 @@ GUARD_CASES = [
 def run_guardrails() -> list[dict]:
     rows = []
     for case_id, text, expected in GUARD_CASES:
-        check = check_input(text, MAX_QUESTION_CHARS, "question")
+        check = check_input(text, MAX_REQUEST_CHARS, "request")
         actual = "blocked" if not check.allowed else "urgent" if check.urgent else "allowed"
         rows.append({
             "id": case_id, "kind": "guardrail", "input": text, "expected": expected,
@@ -89,38 +90,17 @@ def run_guardrails() -> list[dict]:
     return rows
 
 
-def run_qa(qa: CareGuideQA) -> list[dict]:
-    rows = []
-    for case_id, question, expected, why in QA_CASES:
-        try:
-            result = qa.ask(question)
-        except LLMError as exc:
-            rows.append({"id": case_id, "kind": "qa", "input": question, "expected": expected,
-                         "actual": "error", "auto_pass": False, "output": str(exc)})
-            continue
-        rows.append({
-            "id": case_id, "kind": "qa", "input": question, "expected": expected, "why": why,
-            "actual": result.status,
-            # "answered" already implies grounded: it cites the guide and every
-            # number in it appears in a cited passage (see pawpal_qa).
-            "auto_pass": result.status == expected,
-            "output": result.answer,
-            "citations": [p.cite() for p in result.citations],
-            "warnings": result.warnings,
-        })
-    return rows
-
-
-def run_plans(llm_factory, knowledge: KnowledgeBase, task_model) -> list[dict]:
+def run_plans(task_model) -> list[dict]:
     rows = []
     for case_id, request, minutes, good in PLAN_CASES:
+        client = None
         try:
-            result = PlanningAgent(llm_factory(), knowledge, task_model=task_model).run(
-                request, "Eval", minutes
-            )
+            client = GeminiClient()
+            result = PlanningAgent(client, task_model=task_model).run(request, "Eval", minutes)
         except LLMError as exc:
             rows.append({"id": case_id, "kind": "plan", "input": request, "expected": good,
-                         "actual": "error", "auto_pass": False, "output": str(exc)})
+                         "actual": "error", "auto_pass": False, "output": str(exc),
+                         "model": getattr(client, "model", None)})
             continue
         schedule = result.schedule
         plan = [
@@ -131,11 +111,11 @@ def run_plans(llm_factory, knowledge: KnowledgeBase, task_model) -> list[dict]:
         rows.append({
             "id": case_id, "kind": "plan", "input": request, "expected": good,
             "actual": result.stopped_reason,
-            # Mechanical bar: finished cleanly, used the guide, produced tasks,
-            # and the post-check found nothing wrong with the run itself.
+            # Mechanical bar: finished cleanly, produced tasks, and the post-check
+            # found nothing wrong with the run itself. Whether the plan is any
+            # good is the human rating's job.
             "auto_pass": (
                 result.stopped_reason == "finished"
-                and bool(result.citations)
                 and task_count > 0
                 and not result.process_issues
             ),
@@ -143,7 +123,7 @@ def run_plans(llm_factory, knowledge: KnowledgeBase, task_model) -> list[dict]:
             "plan": plan,
             "skipped": [f"{pet.name}: {task.title}" for pet, task in schedule.skipped],
             "issues": result.issues,
-            "citations": [p.cite() for p in result.citations],
+            "model": client.model,
             "second_opinions": [
                 f"{o.task}: agent {o.agent_priority}, model {o.model_priority} ({o.confidence:.0%})"
                 for o in result.second_opinions
@@ -159,7 +139,8 @@ def write_markdown(rows: list[dict], model: str, path: Path) -> None:
     lines = [
         "# PawPal+ live evaluation",
         "",
-        f"Run {datetime.now():%Y-%m-%d %H:%M} with `{model}`. Full output in `live_eval.json`.",
+        f"Run {datetime.now():%Y-%m-%d %H:%M}; main model `{model}` (lighter fallbacks are used"
+        " when it is overloaded, see the Model column). Full output in `live_eval.json`.",
         "",
         f"**Automatic checks: {passed} of {len(rows)} passed.**",
         "",
@@ -170,14 +151,14 @@ def write_markdown(rows: list[dict], model: str, path: Path) -> None:
         "- **Correct** (1-3): 3 = accurate and safe; 2 = minor issue; 1 = wrong or unsafe.",
         "- **Useful** (1-3): 3 = I'd follow it as-is; 2 = needs small edits; 1 = not useful.",
         "",
-        "| ID | Kind | Input | Expected | Actual | Auto check | Correct (1-3) | Useful (1-3) | Notes |",
-        "|----|------|-------|----------|--------|:----------:|:-------------:|:------------:|-------|",
+        "| ID | Kind | Input | Expected | Actual | Model | Auto check | Correct (1-3) | Useful (1-3) | Notes |",
+        "|----|------|-------|----------|--------|-------|:----------:|:-------------:|:------------:|-------|",
     ]
     for r in rows:
         text = r["input"] if len(r["input"]) <= 60 else r["input"][:57] + "..."
         lines.append(
             f"| {r['id']} | {r['kind']} | {text} | {r['expected']} | {r['actual']}"
-            f" | {'✅' if r['auto_pass'] else '❌'} |  |  |  |"
+            f" | {r.get('model') or '-'} | {'✅' if r['auto_pass'] else '❌'} |  |  |  |"
         )
     lines += [
         "",
@@ -196,11 +177,9 @@ def main() -> int:
     if not gemini_api_key():
         print("Set GEMINI_API_KEY (e.g. in .env) to run the live evaluation.", file=sys.stderr)
         return 1
-    knowledge = KnowledgeBase.from_directory()
     model_name = GeminiClient().model
     rows = run_guardrails()
-    rows += run_qa(CareGuideQA(knowledge, GeminiClient()))
-    rows += run_plans(GeminiClient, knowledge, TaskModel.train())
+    rows += run_plans(TaskModel.train())
 
     OUT_DIR.mkdir(exist_ok=True)
     (OUT_DIR / "live_eval.json").write_text(

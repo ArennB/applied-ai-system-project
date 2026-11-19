@@ -2,11 +2,11 @@
 
 PawPal+ turns a description of your pets and your day into a daily care plan
 that fits the time you have. At its core is a deterministic scheduler, built
-first in Module 2. An AI agent (Gemini) now sits on top of it: the agent
-reads a small pet-care guide and creates tasks. The scheduler still decides
-the times, and code, a second model and the owner check every AI result.
+first in Module 2. An AI agent (Gemini) now sits on top of it and creates the
+tasks from plain English. The scheduler still decides the times, and code, a
+trained second model and the owner check every AI result.
 
-**Built with:** Python 3.13 · Streamlit · Gemini (`google-genai`) · scikit-learn · pytest (183 tests)
+**Built with:** Python 3.13 · Streamlit · Gemini (`google-genai`) · scikit-learn · pytest (141 tests)
 
 ## Contents
 1. [Quick start](#quick-start)
@@ -30,27 +30,26 @@ source .venv/bin/activate          # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 
 python main.py                     # CLI demo of the scheduler (no key needed)
-python -m pytest                   # run all 183 tests (no key or network needed)
+python -m pytest                   # run all 141 tests (no key or network needed)
 streamlit run app.py               # the app, at http://localhost:8501
 ```
 
-**Optional: turn on the AI features.** Get a free Gemini key at
+**Optional: turn on Plan with AI.** Get a free Gemini key at
 <https://aistudio.google.com/apikey> and put it in a `.env` file (git ignores it):
 
 ```bash
 echo 'GEMINI_API_KEY=your-key' > .env
 ```
 
-Without a key, the AI planner is off and *Ask the care guide* shows passages
-instead of written answers. Everything else works.
+Without a key, the AI planner is off and everything else works.
 
 <details>
 <summary>Other commands and optional settings</summary>
 
 ```bash
-python demo_offline.py      # offline demo of the AI features and guardrails
+python demo_offline.py      # offline demo of quick add, guardrails and the agent's checks
 ./make_evidence.sh          # rerun everything and save output to evidence/*.txt
-python -m pawpal_model      # evaluate the trained model -> data/model_report.md
+python -m task_model        # evaluate the trained model -> data/model_report.md
 python eval_live.py         # live Gemini evaluation for human rating (needs a key)
 ```
 
@@ -62,15 +61,15 @@ Optional `.env` settings:
 | `PAWPAL_GEMINI_FALLBACK_MODELS` | `gemini-3.5-flash-lite,gemini-3.1-flash-lite` | Used when the main model is overloaded; empty turns it off |
 | `PAWPAL_GEMINI_THINKING` | `low` | `minimal` / `low` / `medium` / `high` / `default`; lower is faster |
 
-If you edit a `pawpal_*.py` file while the app is running, restart Streamlit.
+If you edit a `.py` file while the app is running, restart Streamlit.
 </details>
 
 ---
 
 ## Core system: classes and scheduling algorithms
 
-All of this lives in [`pawpal_system.py`](pawpal_system.py). The UML class
-diagram is [`diagrams/uml_final.mmd`](diagrams/uml_final.mmd).
+All of this lives in [`scheduler.py`](scheduler.py). The UML class diagram is
+[`diagrams/uml_final.mmd`](diagrams/uml_final.mmd).
 
 | Class | Holds | Key methods |
 |-------|-------|-------------|
@@ -106,22 +105,17 @@ reads the owner and produces a `Schedule` of `ScheduledTask`s.
 
 | Feature | You do | You get |
 |---------|--------|---------|
-| ✨ **Plan with AI** (agent + retrieval) | Describe your pets and day in plain English | Pets and tasks created from the care guide, placed by the scheduler, with an explanation and the sources used |
-| 📖 **Ask the care guide** (retrieval Q&A) | Ask a care question | An answer built only from the guide, with numbered citations, or "the guide doesn't cover that" |
+| ✨ **Plan with AI** (agent) | Describe your pets and day in plain English | Pets and tasks created for you, placed by the scheduler, with an explanation, every step the agent took, and any warnings |
 | ⚡ **Quick add** (trained model) | Type one line, e.g. "scoop litter" | A task with predicted priority, duration and frequency |
 
 ```mermaid
 flowchart LR
-    U["👤 Owner"] -->|request / question| G["🛡️ Input guardrails"]
+    U["👤 Owner"] -->|request| G["🛡️ Input guardrails"]
     G --> A["🤖 Planning agent<br/>(Gemini)"]
-    G --> Q["📖 Care guide Q&A<br/>(Gemini)"]
-    A <-->|search| KB[("📚 Care guide<br/>TF-IDF retrieval")]
-    Q -->|always retrieves first| KB
     A -->|validated tools| S["⚙️ Scheduler<br/>(Module 2, deterministic)"]
     S --> C["✅ Post-check<br/>+ second-opinion model"]
-    Q --> V["✅ Citation + number check"]
     C --> R["👀 Owner reviews and edits"]
-    V --> R
+    R -->|edits| S
 ```
 
 The full diagram, showing every guardrail and check, is
@@ -129,29 +123,25 @@ The full diagram, showing every guardrail and check, is
 
 **How a request is handled:**
 
-1. **Input guardrails.**
+1. **Input guardrails** ([`guardrails.py`](guardrails.py)).
    - Requests that look like prompt injection are refused before any model
      call.
    - Emergency wording ("ate chocolate") shows a "call your vet now" banner.
    - Each session gets at most 10 AI calls every 5 minutes.
-2. **The planning agent** ([`pawpal_agent.py`](pawpal_agent.py)) runs Gemini
-   in a loop. Gemini can only act through 8 tools, such as `add_task` and
-   `build_plan`.
+2. **The planning agent** ([`agent.py`](agent.py)) runs Gemini in a loop.
+   Gemini can only act through 7 tools, such as `add_task` and `build_plan`.
    - Each tool validates its input.
    - The agent works on a copy of your pets, so a failed run changes nothing.
-3. **Retrieval** ([`pawpal_rag.py`](pawpal_rag.py)) searches about 40
-   hand-written passages in [`knowledge/`](knowledge/).
-4. **The scheduler** places every task. The model never sets times itself.
-5. **Checks on the output.**
+   - If Gemini is overloaded, the agent falls back to a lighter model.
+3. **The scheduler** places every task. The model never sets times itself.
+4. **Checks on the output.**
    - The finished plan is rebuilt independently and flagged if a
-     high-priority task didn't fit, fixed times clash, or the guide wasn't
-     used.
-   - A trained classifier ([`pawpal_model.py`](pawpal_model.py)) flags
+     high-priority task didn't fit, fixed times clash, or the run stopped
+     early.
+   - A trained classifier ([`task_model.py`](task_model.py)) flags
      priorities it confidently disagrees with.
-   - Q&A answers must cite passages, and every number they state must appear
-     in those passages.
-6. **The owner** reviews the sources and steps under *Why this plan?*, then
-   edits anything under *Manage tasks*.
+5. **The owner** reviews the steps and second opinions under *Why this plan?*,
+   then edits anything under *Manage tasks*.
 
 Every step is logged to `logs/pawpal.log` with a run ID.
 
@@ -168,8 +158,8 @@ regenerates without a key.
 | `python main.py` | [`evidence/scheduler.txt`](evidence/scheduler.txt) |
 | `python -m pytest -v` | [`evidence/tests.txt`](evidence/tests.txt) |
 | `python demo_offline.py` | [`evidence/demo_offline.txt`](evidence/demo_offline.txt) |
-| `python -m pawpal_model` | [`evidence/model_eval.txt`](evidence/model_eval.txt) |
-| *(log written by the runs above)* | [`evidence/pawpal_log_sample.txt`](evidence/pawpal_log_sample.txt) |
+| `python -m task_model` | [`evidence/model_eval.txt`](evidence/model_eval.txt) |
+| *(log written by the runs above)* | [`evidence/log_sample.txt`](evidence/log_sample.txt) |
 
 ### 1. CLI demo: `main.py`
 
@@ -228,46 +218,46 @@ tasks are completed, and tomorrow's plan.
 ```
 $ python -m pytest -v
 ...
-tests/test_pawpal.py::test_sort_orders_by_priority_high_to_low PASSED
-tests/test_pawpal.py::test_sort_breaks_priority_ties_shortest_first PASSED
+tests/test_scheduler.py::test_sort_orders_by_priority_high_to_low PASSED
+tests/test_scheduler.py::test_sort_breaks_priority_ties_shortest_first PASSED
 tests/test_agent.py::test_post_check_flags_problems_the_model_glossed_over PASSED
-tests/test_model.py::test_confidence_tracks_accuracy PASSED
+tests/test_task_model.py::test_confidence_tracks_accuracy PASSED
 ...
-============================= 183 passed in 5.05s ==============================
+============================= 141 passed in 5.01s ==============================
 ```
 
 ### 3. Plan with AI: live Gemini run
+
+From `python eval_live.py` (case plan-1, [`data/live_eval.json`](data/live_eval.json)).
+`gemini-3.8-flash` was overloaded, so the agent used the fallback
+`gemini-3.5-flash-lite`.
 
 **Input** (75 minutes available):
 
 > Mochi is a 2-year-old husky and Luna is a 14-year-old cat with kidney disease
 > who gets meds at 08:00. I have 75 minutes today and Luna has a vet visit at 10:00.
 
-**Agent steps and result.** `gemini-3.8-flash` was overloaded, so this run
-used the fallback `gemini-3.5-flash-lite`.
+**Result** (10 agent steps):
 
 ```
-step 1: Searched the care guide for 'husky daily exercise'
-step 1: Searched the care guide for 'cat kidney disease medication daily care'
-step 1: Set the time budget to 75 min
-step 2: Added Mochi · Added Luna · Added 'Morning walk' for Mochi
-        Added 'Morning meds' for Luna · Added 'Vet visit' for Luna
-step 3: Built the schedule
-step 4: Writing up the plan
-
-08:00  Luna   Morning meds   10 min
-08:10  Mochi  Morning walk   35 min
-10:00  Luna   Vet visit      30 min
-post-check issues: none
+08:00-08:05  Luna   Kidney meds    (high)
+08:05-08:15  Mochi  Feeding        (high)
+08:15-08:25  Luna   Feeding        (high)
+10:00-10:30  Luna   Vet visit      (high)
+skipped:         Mochi: Morning walk
+second opinion:  Morning walk: agent medium, model high (92%)
 ```
 
-> *Explanation (excerpt):* "Your 75-minute care plan fits everything into your
-> schedule today! Following the care guide recommendations, Mochi's morning
-> walk is set to 35 minutes to accommodate his high-energy husky needs
-> without exceeding your time limit. …"
+> *Explanation:* "Your 75-minute schedule is set! It includes Luna's 08:00
+> kidney meds, feeding for both Mochi and Luna, and Luna's 10:00 vet visit.
+> Unfortunately, Mochi's 30-minute morning walk could not fit within today's
+> 75-minute time budget…"
 
-The agent searched the guide before adding tasks. The meds and vet visit
-are pinned at their stated times, and the plan uses exactly 75 minutes.
+The meds and vet visit are pinned at the owner's times, and the agent is
+honest that the walk didn't fit. But it rated a husky's only walk as medium
+priority, and the trained model **flagged that** with 92% confidence. That's
+the second opinion doing its job: the owner sees the flag under *Why this
+plan?* and can raise the walk's priority.
 
 ### 4. Quick add: trained model with confidence scores
 
@@ -285,23 +275,7 @@ are pinned at their stated times, and the plan uses exactly 75 minutes.
   confident enough to second-guess the agent: no (below the 70% bar)
 ```
 
-### 5. Care guide: retrieval and the relevance gate
-
-```
-> 'How much exercise does a husky need?'
-  [1] enrichment.md › Mental stimulation for dogs   score 0.2125
-  [2] feeding.md › Feeding order and timing         score 0.1512
-  [3] dog_exercise.md › High-energy breeds          score 0.1456
-  [4] dog_exercise.md › Splitting exercise into tasks score 0.1425
-
-> 'What is the capital of France?'   -> not_covered (model never called)
-> 'Can my dog drive a car?'          -> not_covered (model never called)
-```
-
-With a key, Gemini sees only these passages and must cite them. Note that
-keyword search ranks the most useful passage third, a known limitation.
-
-### 6. Guardrail results
+### 5. Guardrail results
 
 ```
   input                                                          expected actual
@@ -310,16 +284,16 @@ keyword search ranks the most useful passage third, a known limitation.
   "Ignore the cat today, she's at the groomer"                   allowed  allowed  PASS
   'My dog ate chocolate an hour ago, what should I do?'          urgent   urgent   PASS
   'My cat is having a seizure'                                   urgent   urgent   PASS
-  'xxxxxxxxxxxxxxxxxxxx... (500 chars)'                          blocked  blocked  PASS
+  'Mochi is a husky and I have 60 minutes today'                 allowed  allowed  PASS
+  'xxxxxxxxxxxxxxxxxxxx... (2500 chars)'                         blocked  blocked  PASS
 
 Rate limit: 12 calls in a row -> allowed 10, refused 2
-Grounding:  'A husky needs about 200 minutes a day [1].' -> FLAGGED, not in source: ['200']
 ```
 
 Known misses (e.g. "vomiting blood" doesn't trigger the emergency banner)
 are listed in [`model_card.md`](model_card.md#limitations-and-biases).
 
-### 7. Catching a model that makes mistakes
+### 6. Catching a model that makes mistakes
 
 A **scripted** model stands in for Gemini here, so the mistakes are
 deliberate and the run is reproducible. PawPal's responses are real. The
@@ -332,59 +306,58 @@ books two overlapping appointments, and then claims "everything fits":
 Model's explanation: 'Everything fits perfectly!'
 
 Post-check (ignores the explanation, inspects the actual plan):
-  ! The assistant did not consult the care guide, so durations and priorities are its own estimates. ...
   ! High-priority 'Walk' for Mochi (90 min) did not fit in the time available.
   ! Conflict: Vet for Mochi (09:00-09:30) overlaps Groomer for Mochi (09:15-09:45) [same pet]
 
 Second opinion from the trained model:
+  Mochi/Groomer: agent said high, model says medium (92% sure)
   Mochi/Brush coat: agent said high, model says low (94% sure)
 ```
 
 The same events in `logs/pawpal.log`:
 
 ```
-WARNING pawpal.agent  [run 710d7b06] step 2: add_task {...} -> priority must be low, medium or high, got 'urgent'.
-WARNING pawpal.agent  [run 710d7b06] post-check: High-priority 'Walk' for Mochi (90 min) did not fit in the time available.
-INFO    pawpal.agent  [run 710d7b06] second opinion: Mochi/Groomer agent=high model=medium (92%)
+WARNING pawpal.agent  [run 217ad093] step 2: add_task {...} -> priority must be low, medium or high, got 'urgent'.
+WARNING pawpal.agent  [run 217ad093] post-check: High-priority 'Walk' for Mochi (90 min) did not fit in the time available.
+INFO    pawpal.agent  [run 217ad093] second opinion: Mochi/Groomer agent=high model=medium (92%)
 ```
 
 ---
 
 ## Testing summary
 
-**183 of 183 tests pass, with no API key or network needed.** The trained
-model's confidence turned out to be meaningful. When it is at least 70% sure
-of a priority, it's right 72% of the time, versus 53% below that, so it
-only flags a task above that bar. Retrieval at first matched off-topic
-questions that share a pet word ("Can my dog drive a car?"). Adding a
-topic-word gate fixed that.
+**141 of 141 tests pass, with no API key or network needed.** In the live
+evaluation, all 8 automatic checks passed (3 guardrail cases, 5 planning
+requests). The trained model's confidence turned out to be meaningful.
+When it is at least 70% sure of a priority, it's right 72% of the time,
+versus 53% below that, so it only flags a task above that bar.
 
 | Test file | Tests | Covers |
 |-----------|------:|--------|
-| `test_pawpal.py` | 42 | The core scheduler: sorting, time budget, fixed times, conflicts, due dates, recurrence |
-| `test_guardrails.py` | 37 | Injection and emergency detection, length caps, number check, rate limit |
-| `test_agent.py` | 35 | The agent with a scripted model: tool validation, step cap, post-check, model fallback |
-| `test_model.py` | 20 | The trained model beats a baseline, its confidence tracks accuracy, quick-add parsing |
-| `test_qa.py` | 18 | Off-topic questions never reach the model; uncited answers are flagged |
-| `test_rag.py` | 14 | Chunking and ranking of the care guide |
-| `test_app.py` | 9 | The whole Streamlit app, driven headlessly |
+| `test_scheduler.py` | 42 | The core scheduler: sorting, time budget, fixed times, conflicts, due dates, recurrence |
+| `test_agent.py` | 35 | The agent with a scripted model: tool validation, revise loop, step cap, post-check, second opinions, model fallback |
+| `test_guardrails.py` | 30 | Injection and emergency detection, length caps, rate limit, logging, guardrails inside the app |
+| `test_task_model.py` | 20 | The trained model beats a baseline, its confidence tracks accuracy, quick-add parsing |
 | `test_ui.py` | 8 | The task editor table |
+| `test_app.py` | 6 | The whole Streamlit app, driven headlessly |
 
 **Other reliability measures:**
 - **Model evaluation** ([`data/model_report.md`](data/model_report.md)): the
   priority accuracy is 64% versus a 50% baseline, the frequency accuracy is
   82% versus 75%, and confident predictions are right more often than
   unsure ones.
-- **Logging:** every agent step, tool call, guardrail hit and failure is
-  logged with a run ID.
-- **Human evaluation:** [`eval_live.py`](eval_live.py) runs 13 fixed cases
-  through the real model and writes `data/live_eval.md`,
-  with columns for a person to rate each answer.
-  > 📝 **To fill in:** run it with your key, rate the rows, and summarise the
+- **Logging:** every agent step, tool call, guardrail hit, model fallback and
+  failure is logged with a run ID.
+- **Human evaluation:** [`eval_live.py`](eval_live.py) runs 8 fixed cases
+  through the real model and writes [`data/live_eval.md`](data/live_eval.md),
+  with columns for a person to rate each plan.
+  > 📝 **To fill in:** rate the rows in `data/live_eval.md` and summarise the
   > results here.
 
 **What didn't work:**
-- Keyword retrieval sometimes ranks the best passage below a weaker one.
+- Without reference material, the agent sometimes under-rates exercise, as
+  in the husky example above. The second-opinion model caught it, but only
+  as a flag.
 - The classifier plateaus at about 64% on priority, because the labels are
   partly a judgement call. That's why it only advises.
 - Live Gemini quality can't be covered by automated tests, which is why the
@@ -398,7 +371,7 @@ topic-word gate fixed that.
 |----------|-----|-----------|
 | Gemini acts only through validated tools, and the scheduler sets the times | LLMs are good at turning text into tasks but unreliable at fitting 9 tasks into 75 minutes, and the scheduler was already tested | Several API round trips per plan, so it's slower |
 | My own agent loop instead of the SDK's automatic tool calling | Keeps the step cap, trace and error handling in my code | More code to maintain |
-| TF-IDF retrieval over a small hand-written guide | Deterministic, no extra service, and every fact is one I can check | Matches words, not meaning, and covers common care only |
+| No retrieval (RAG) | An earlier version searched a hand-written care guide. It added a second feature and a lot of explanation for little gain, so I removed it to keep the system focused. | Durations and priorities come from Gemini's general knowledge, checked by the trained model |
 | The trained classifier only flags, never overrides | It's a different kind of model, so it doesn't share the LLM's blind spots | 64% accurate on priority, so overriding would make things worse |
 | Guardrails in code, not in the prompt | A prompt can be talked out of its rules; an `if` statement can't | Pattern lists miss creative rewordings |
 | Fallback to lighter models when Gemini is overloaded | Every full Flash model returned 503s during testing | Plan quality can vary with Google's load |
@@ -408,11 +381,12 @@ topic-word gate fixed that.
 ## Reflection
 
 Adding AI was the easy part. Deciding where *not* to trust it was the real
-design work: tools that refuse bad values, a post-check that looks at what the
-model *did* rather than what it *says*, and citations and numbers that must
-match the source. Keeping the original scheduler as the authority, rather
-than letting the LLM write schedules, kept the system testable and easy to
-debug.
+design work: tools that refuse bad values, and a post-check that looks at
+what the model *did* rather than what it *says*. Keeping the original
+scheduler as the authority, rather than letting the LLM write schedules,
+kept the system testable and easy to debug. I also learned that less can be
+more. Removing the retrieval feature made the project easier to explain,
+without losing the checks that matter.
 
 - [`reflection.md`](reflection.md) covers the original design, the scheduling
   trade-offs, and how AI was used, checked and corrected while building the
@@ -426,24 +400,21 @@ debug.
 ## Project layout
 
 ```
-pawpal_system.py       Core classes and scheduler (Owner, Pet, Task, Scheduler)
+scheduler.py           Core classes and scheduler (Owner, Pet, Task, Scheduler)
 main.py                CLI demo of the core system
 app.py                 Streamlit app
-pawpal_agent.py        Planning agent, validated tools, post-check, Gemini client
-pawpal_rag.py          TF-IDF retrieval over the care guide
-pawpal_qa.py           Ask the care guide: retrieve, gate, generate, verify
-pawpal_model.py        Trained task classifier and its evaluation
-pawpal_guardrails.py   Input/output guardrails and rate limiter
-pawpal_logging.py      Log setup (logs/pawpal.log)
-pawpal_ui.py           Helpers for the task editor
-demo_offline.py        Offline demo of the AI features and guardrails
+agent.py               Planning agent, validated tools, post-check, Gemini client
+task_model.py          Trained task classifier and its evaluation
+guardrails.py          Input/output guardrails and rate limiter
+log_setup.py           Log setup (logs/pawpal.log)
+ui_helpers.py          Helpers for the task editor
+demo_offline.py        Offline demo of quick add, guardrails and the agent's checks
 eval_live.py           Live Gemini evaluation for human rating
 make_evidence.sh       Regenerates evidence/*.txt
-knowledge/             The care guide (10 Markdown files)
-data/                  Task dataset and model evaluation report
+data/                  Task dataset, model evaluation, live evaluation
 evidence/              Captured command output
 diagrams/              uml_final.mmd (class diagram), system_overview.mmd
-tests/                 183 pytest tests
+tests/                 141 pytest tests
 model_card.md          Responsible-AI reflection
 reflection.md          Design and AI-collaboration reflection
 ```

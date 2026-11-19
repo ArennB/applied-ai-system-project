@@ -3,11 +3,12 @@
 The owner describes their pets and their day in plain English. The agent then
 works in a loop of plan, act and check:
 
-    search the care guide (RAG)  ->  add pets and tasks  ->  build_plan
-            ^                                                   |
-            +---- revise priorities / durations if it fails ----+
+    add pets and tasks  ->  build_plan  ->  finish
+            ^                   |
+            +--- revise if it --+
+                 does not fit
 
-The deterministic Scheduler in pawpal_system stays the source of truth. The
+The deterministic Scheduler in scheduler stays the source of truth. The
 model never writes a schedule itself: it can only call the tools below, every
 tool validates its input, and when the model says it is done the plan is
 rebuilt once more and checked independently (see PlanningAgent._post_check).
@@ -25,15 +26,14 @@ from dataclasses import dataclass, field
 from datetime import date
 from typing import Any, Callable, Protocol
 
-from pawpal_guardrails import (
+from guardrails import (
     MAX_EXPLANATION_CHARS,
     MAX_REQUEST_CHARS,
     clean_model_text,
     require_input,
 )
-from pawpal_logging import get_logger, preview
-from pawpal_rag import KnowledgeBase, Passage
-from pawpal_system import (
+from log_setup import get_logger, preview
+from scheduler import (
     FREQUENCY_STEPS,
     Owner,
     Pet,
@@ -128,20 +128,6 @@ class LLMError(RuntimeError):
 # --- Tools -----------------------------------------------------------------
 
 TOOL_SPECS: list[dict] = [
-    {
-        "name": "search_care_guide",
-        "description": (
-            "Search the PawPal+ pet care guide. Use it before choosing a task's "
-            "duration, priority or frequency. Returns the best matching passages."
-        ),
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "query": {"type": "string", "description": "e.g. 'husky daily exercise'"}
-            },
-            "required": ["query"],
-        },
-    },
     {
         "name": "set_time_budget",
         "description": (
@@ -256,19 +242,16 @@ class PlannerTools:
 
     def __init__(
         self,
-        knowledge: KnowledgeBase,
         owner_name: str,
         available_minutes: int,
         pets: list[Pet] | None = None,
         on: date | None = None,
     ):
-        self.knowledge = knowledge
         self.owner_name = owner_name
         self.available_minutes = available_minutes
         self.pets: list[Pet] = copy.deepcopy(pets or [])
         self.on = on or date.today()
         self.scheduler = Scheduler()
-        self.citations: list[Passage] = []
         self.last_schedule: Schedule | None = None
         # Every task the agent added, for the trained model's second opinion.
         self.created: list[tuple[Pet, Task]] = []
@@ -349,19 +332,6 @@ class PlannerTools:
         return minutes
 
     # Tools ---------------------------------------------------------------------
-
-    def tool_search_care_guide(self, query: str) -> dict:
-        passages = self.knowledge.search(str(query), k=3)
-        for passage in passages:
-            if all(p.cite() != passage.cite() for p in self.citations):
-                self.citations.append(passage)
-        if not passages:
-            return {"results": [], "note": "Nothing in the guide matches; try other words."}
-        return {
-            "results": [
-                {"source": p.cite(), "text": p.text, "score": p.score} for p in passages
-            ]
-        }
 
     def tool_set_time_budget(self, minutes: Any) -> dict:
         self.available_minutes = self._int(minutes, "minutes", MIN_BUDGET, MAX_BUDGET)
@@ -497,10 +467,10 @@ describes their pets and their day; you turn that into pets and care tasks using
 the tools, then check the result with the scheduler.
 
 How to work:
-1. Use search_care_guide before deciding any task's duration, priority or
-   frequency. Base your numbers on what the guide says, adjusted for what the
-   owner told you. Do not invent medical advice; for medication, use the times
-   the owner gives.
+1. Choose each task's duration, priority and frequency from typical pet care
+   for that kind of animal, adjusted for what the owner told you (age, breed,
+   health). Medication and appointments are high priority. Do not invent
+   medical advice; for medication, use the times the owner gives.
 2. If the owner states how much time they have, call set_time_budget.
 3. Add any pets that do not exist yet, then add their tasks. Use fixed_start
    only for things that must happen at a set time (appointments, timed doses).
@@ -510,7 +480,7 @@ How to work:
    fixed time if the owner allowed it. Then call build_plan again.
 5. When the plan is the best you can do, call finish with a short explanation
    for the owner (a few sentences): what is in the plan, why, and anything that
-   did not fit. Mention which guide sections you relied on.
+   did not fit.
 
 The scheduler places fixed-time tasks first, then everything else highest
 priority first and shortest first on ties, skipping whatever exceeds the time
@@ -529,7 +499,7 @@ class TraceStep:
 
 
 class TaskLabeller(Protocol):
-    """A trained model that can predict a task's priority (see pawpal_model)."""
+    """A trained model that can predict a task's priority (see task_model)."""
 
     def predict(self, task: str, species: str) -> Any: ...
 
@@ -558,12 +528,11 @@ class AgentResult:
     available_minutes: int
     schedule: Schedule
     explanation: str
-    citations: list[Passage]
     trace: list[TraceStep]
     issues: list[str]  # everything the post-check found
     stopped_reason: str  # "finished", "model_replied", "max_steps" or "stuck"
-    # The subset of issues about how the run went (step cap, no tasks, guide not
-    # used) rather than about the plan itself. The app shows the plan's own
+    # The subset of issues about how the run went (step cap, stuck, no tasks)
+    # rather than about the plan itself. The app shows the plan's own
     # problems live, so it only needs these from the agent.
     process_issues: list[str] = field(default_factory=list)
     # Tasks whose priority the trained task model would have set differently.
@@ -578,12 +547,10 @@ class PlanningAgent:
     def __init__(
         self,
         llm: LLMClient,
-        knowledge: KnowledgeBase,
         max_steps: int = MAX_STEPS,
         task_model: TaskLabeller | None = None,
     ):
         self.llm = llm
-        self.knowledge = knowledge
         self.max_steps = max_steps
         self.task_model = task_model
 
@@ -609,7 +576,7 @@ class PlanningAgent:
         """
         run_id = uuid.uuid4().hex[:8]
         request = require_input(request, MAX_REQUEST_CHARS, "request")
-        tools = PlannerTools(self.knowledge, owner_name, available_minutes, existing_pets, on)
+        tools = PlannerTools(owner_name, available_minutes, existing_pets, on)
         log.info(
             "[run %s] start: %d existing pet(s), %d min, request %r",
             run_id, len(tools.pets), available_minutes, preview(request),
@@ -680,9 +647,9 @@ class PlanningAgent:
         schedule, process_issues, plan_issues = self._post_check(tools, stopped_reason)
         second_opinions = self._second_opinions(tools)
         log.info(
-            "[run %s] done (%s): %d pet(s), %d task(s), %d citation(s), %d planned, %d skipped",
+            "[run %s] done (%s): %d pet(s), %d task(s), %d planned, %d skipped",
             run_id, stopped_reason, len(tools.pets), sum(len(p.tasks) for p in tools.pets),
-            len(tools.citations), len(schedule.entries), len(schedule.skipped),
+            len(schedule.entries), len(schedule.skipped),
         )
         for issue in process_issues + plan_issues:
             log.warning("[run %s] post-check: %s", run_id, issue)
@@ -696,7 +663,6 @@ class PlanningAgent:
             available_minutes=tools.available_minutes,
             schedule=schedule,
             explanation=explanation,
-            citations=tools.citations,
             trace=trace,
             issues=process_issues + plan_issues,
             stopped_reason=stopped_reason,
@@ -787,11 +753,6 @@ class PlanningAgent:
                     " did not fit in the time available."
                 )
         plan.extend(f"Conflict: {warning}" for warning in schedule.warnings)
-        if any(pet.tasks for pet in tools.pets) and not tools.citations:
-            process.append(
-                "The assistant did not consult the care guide, so durations and"
-                " priorities are its own estimates. Review them before relying on the plan."
-            )
         return schedule, process, plan
 
 
@@ -817,7 +778,6 @@ def describe_call(call: ToolCall, result: dict) -> str:
     args = call.args or {}
     title, pet = args.get("title", ""), args.get("pet_name", "")
     text = {
-        "search_care_guide": f"Searched the care guide for '{args.get('query', '')}'",
         "set_time_budget": f"Set the time budget to {args.get('minutes')} min",
         "add_pet": f"Added {args.get('name', 'a pet')}",
         "add_task": f"Added '{title}' for {pet}",
@@ -941,26 +901,6 @@ class GeminiClient:
             if part.function_call
         ]
         return ModelTurn(text=text, tool_calls=calls, raw=content)
-
-    def generate(self, system: str, prompt: str) -> str:
-        """Plain text generation with no tools, for Ask the care guide."""
-        types = self._types
-        response = self._generate(
-            can_switch=True,
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                system_instruction=system, thinking_config=self._thinking
-            ),
-        )
-        candidate = response.candidates[0] if response.candidates else None
-        parts = candidate.content.parts if candidate and candidate.content else None
-        text = "".join(
-            part.text for part in (parts or []) if part.text and not getattr(part, "thought", False)
-        )
-        if not text.strip():
-            reason = getattr(candidate, "finish_reason", None) if candidate else "no candidates"
-            raise LLMError(f"Gemini returned an empty response ({reason}).")
-        return text
 
     def _content(self, message: dict):
         """Translate one provider-neutral message into a Gemini Content."""

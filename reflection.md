@@ -82,7 +82,7 @@ I used AI to turn my UML into class stubs, implement sorting, conflict detection
 
 - What kinds of prompts or questions were most helpful?
 
-Specific, file-scoped prompts worked best, such as "add conflict detection to Scheduler in pawpal_system.py". Asking "what edge cases could break this?" was also useful, because it surfaced cases like back-to-back tasks and completing a task twice.
+Specific, file-scoped prompts worked best, such as "add conflict detection to Scheduler in pawpal_system.py" (now `scheduler.py`). Asking "what edge cases could break this?" was also useful, because it surfaced cases like back-to-back tasks and completing a task twice.
 
 **b. Judgment and verification**
 

@@ -1,9 +1,9 @@
-"""Tests for the pure UI helpers in pawpal_ui, chiefly the task editor round trip."""
+"""Tests for the pure UI helpers in ui_helpers, chiefly the task editor round trip."""
 
 from datetime import time
 
-from pawpal_system import Pet, Priority, Task
-from pawpal_ui import apply_task_edits, cell_minutes, editor_rows, to_minutes, to_time
+from scheduler import Pet, Priority, Task
+from ui_helpers import apply_task_edits, cell_minutes, editor_rows, to_minutes, to_time
 
 
 def pet_with(*tasks: Task) -> Pet:

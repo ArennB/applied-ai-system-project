@@ -1,8 +1,8 @@
-"""Tests for the trained task model (pawpal_model)."""
+"""Tests for the trained task model (task_model)."""
 
 import pytest
 
-from pawpal_model import (
+from task_model import (
     MINUTE_BUCKETS,
     TARGETS,
     TaskModel,
@@ -10,7 +10,7 @@ from pawpal_model import (
     load_examples,
     parse_quick_add,
 )
-from pawpal_system import Priority
+from scheduler import Priority
 
 
 @pytest.fixture(scope="module")
@@ -68,8 +68,8 @@ def test_model_beats_majority_baseline_on_every_target():
 
 def test_confidence_tracks_accuracy():
     """Confident predictions must be right more often, or the 70% bar means nothing."""
-    from pawpal_agent import SECOND_OPINION_CONFIDENCE
-    from pawpal_model import CONFIDENCE_BAR
+    from agent import SECOND_OPINION_CONFIDENCE
+    from task_model import CONFIDENCE_BAR
 
     assert CONFIDENCE_BAR == SECOND_OPINION_CONFIDENCE
     results = evaluate()

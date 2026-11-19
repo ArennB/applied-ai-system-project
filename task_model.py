@@ -7,8 +7,8 @@ pet's species, the model predicts three things:
     minutes    - a duration bucket: 5, 10, 15, 20, 30, 45, 60 or 90
     frequency  - once / daily / weekly
 
-It is trained on data/task_dataset.csv, a hand-labelled set of pet care tasks
-whose labels follow the care guide in knowledge/. Each target gets its own
+It is trained on data/task_dataset.csv, a hand-labelled set of 219 pet care
+tasks (labels written with AI assistance and reviewed by hand). Each target gets its own
 scikit-learn pipeline: word and character TF-IDF features into a logistic
 regression. Character n-grams let it cope with typos and word forms the
 dataset never saw ("walkies", "meds", "vaccs").
@@ -21,7 +21,7 @@ The app uses it in two places:
 Training takes well under a second, so the app trains at startup instead of
 loading a pickled model; that sidesteps scikit-learn version mismatches.
 
-Run `python -m pawpal_model` to evaluate it and write data/model_report.md.
+Run `python -m task_model` to evaluate it and write data/model_report.md.
 """
 
 import csv
@@ -38,8 +38,8 @@ from sklearn.metrics import accuracy_score, classification_report
 from sklearn.model_selection import KFold, cross_val_score, train_test_split
 from sklearn.pipeline import FeatureUnion, Pipeline
 
-from pawpal_logging import get_logger
-from pawpal_system import Priority, parse_time
+from log_setup import get_logger
+from scheduler import Priority, parse_time
 
 log = get_logger("model")
 
@@ -50,7 +50,7 @@ DEFAULT_REPORT = DATA_DIR / "model_report.md"
 TARGETS = ("priority", "minutes", "frequency")
 MINUTE_BUCKETS = (5, 10, 15, 20, 30, 45, 60, 90)
 RANDOM_STATE = 42
-# Matches pawpal_agent.SECOND_OPINION_CONFIDENCE (not imported, to keep this
+# Matches agent.SECOND_OPINION_CONFIDENCE (not imported, to keep this
 # module free of the agent); evaluate() reports accuracy on each side of it.
 CONFIDENCE_BAR = 0.7
 
@@ -323,13 +323,13 @@ def format_report(results: dict) -> str:
         "",
         "## Caveats",
         "",
-        "- The dataset is small and its labels were written with AI assistance,"
-        " following the care guide in `knowledge/`. The model learns whatever the"
-        " labels say, so review them before trusting it on new kinds of task.",
+        "- The dataset is small and its labels were written with AI assistance."
+        " The model learns whatever the labels say, so review them before"
+        " trusting it on new kinds of task.",
         "- With ~44 test rows, one more or fewer correct prediction moves hold-out"
         " accuracy by about 2 points; the cross-validation figure is the steadier one.",
         "",
-        "Regenerate with `python -m pawpal_model`.",
+        "Regenerate with `python -m task_model`.",
     ]
     return "\n".join(lines) + "\n"
 

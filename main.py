@@ -1,7 +1,7 @@
 """PawPal+ command line demo.
 
 Builds a small household by hand, then shows the scheduling logic in
-pawpal_system.py working without starting Streamlit: how tasks get ordered, what
+scheduler.py working without starting Streamlit: how tasks get ordered, what
 today's plan looks like, and how tasks can be filtered afterwards.
 
 Run it with:
@@ -10,7 +10,7 @@ Run it with:
 
 from datetime import date, timedelta
 
-from pawpal_system import (
+from scheduler import (
     Owner,
     Pet,
     Priority,

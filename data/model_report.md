@@ -71,7 +71,7 @@ weighted avg       0.89      0.82      0.83        44
 
 ## Caveats
 
-- The dataset is small and its labels were written with AI assistance, following the care guide in `knowledge/`. The model learns whatever the labels say, so review them before trusting it on new kinds of task.
+- The dataset is small and its labels were written with AI assistance. The model learns whatever the labels say, so review them before trusting it on new kinds of task.
 - With ~44 test rows, one more or fewer correct prediction moves hold-out accuracy by about 2 points; the cross-validation figure is the steadier one.
 
-Regenerate with `python -m pawpal_model`.
+Regenerate with `python -m task_model`.

@@ -8,7 +8,7 @@ from datetime import date
 
 import pytest
 
-from pawpal_system import (
+from scheduler import (
     Owner,
     Pet,
     Priority,
