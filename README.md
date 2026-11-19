@@ -348,11 +348,6 @@ versus 53% below that, so it only flags a task above that bar.
   unsure ones.
 - **Logging:** every agent step, tool call, guardrail hit, model fallback and
   failure is logged with a run ID.
-- **Human evaluation:** [`eval_live.py`](eval_live.py) runs 8 fixed cases
-  through the real model and writes [`data/live_eval.md`](data/live_eval.md),
-  with columns for a person to rate each plan.
-  > 📝 **To fill in:** rate the rows in `data/live_eval.md` and summarise the
-  > results here.
 
 **What didn't work:**
 - Without reference material, the agent sometimes under-rates exercise, as
